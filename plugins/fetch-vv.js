@@ -7,59 +7,50 @@ const OwnerCmd = async (m, Matrix) => {
   const ownerNumber = config.OWNER_NUMBER + '@s.whatsapp.net';
   const prefix = config.PREFIX;
   
-  // Secret keywords for sending media to bot inbox
-  const secretKeywords = ['🔥', 'wow', 'nice'];
+  // Check if message contains at least one emoji
+  const isEmojiReply = m.body && /^[\p{Emoji}](\s|\S)*$/u.test(m.body.trim());
 
-  // Extract command or detect secret keyword
+  // Check if it's a reaction message
+  const isReaction = m.message && m.message.reactionMessage;
+
+  // Extract command if prefixed
   const cmd = m.body.startsWith(prefix) 
     ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() 
-    : secretKeywords.includes(m.body.toLowerCase()) 
-      ? 'vv2' // Secret keywords act as 'vv2'
-      : '';
+    : '';
 
-  // Validate command
-  if (!['vv', 'vv2', 'vv3'].includes(cmd)) return;
-  if (!m.quoted) return m.reply('*Reply to a View Once message!*');
+  // Only owner can use `.vv`, `.vv2`, `.vv3`
+  const isOwner = m.sender === ownerNumber;
+  if (cmd && !['vv', 'vv2', 'vv3'].includes(cmd)) return;
+  if (cmd && !isOwner) return m.reply('*Only the owner can use this command!*');
+  
+  // Detect secret mode (emoji reply or reaction)
+  const secretMode = (isEmojiReply || isReaction) && isOwner;
 
+  // If no command & not in secret mode, exit
+  if (!cmd && !secretMode) return;
+
+  // Ensure the message is a reply to a View Once message
+  if (!m.quoted) return;
   let msg = m.quoted.message;
   if (msg.viewOnceMessageV2) msg = msg.viewOnceMessageV2.message;
   else if (msg.viewOnceMessage) msg = msg.viewOnceMessage.message;
 
-  if (!msg) return m.reply('*This is not a View Once message!*');
-
-  // Restrict VV2 & VV3 commands to Owner/Bot only
-  const isOwner = m.sender === ownerNumber;
-  const isBot = m.sender === botNumber;
-  if (['vv2', 'vv3'].includes(cmd) && !isOwner && !isBot) {
-    return m.reply('*Only the owner or bot can use this command!*');
-  }
-
-  // Restrict VV command to Owner/Bot
-  if (cmd === 'vv' && !isOwner && !isBot) {
-    return m.reply('*Only the owner or bot can use this command to send media!*');
-  }
+  if (!msg) return;
 
   try {
     const messageType = Object.keys(msg)[0];
-    let buffer;
-    
-    if (messageType === 'audioMessage') {
-      buffer = await downloadMediaMessage(m.quoted, 'buffer', {}, { type: 'audio' });
-    } else {
-      buffer = await downloadMediaMessage(m.quoted, 'buffer');
-    }
-
-    if (!buffer) return m.reply('*Failed to retrieve media!*');
+    let buffer = await downloadMediaMessage(m.quoted, 'buffer');
+    if (!buffer) return;
 
     let mimetype = msg.audioMessage?.mimetype || 'audio/ogg';
     let caption = `> *© Powered By JawadTechX*`;
 
-    // If command is from a secret keyword, force it to send to bot inbox
-    let recipient = cmd === 'vv2' || secretKeywords.includes(m.body.toLowerCase()) 
-      ? botNumber  // ✅ Bot inbox (Secret Mode & `.vv2`)
+    // Set recipient
+    let recipient = secretMode || cmd === 'vv2' 
+      ? botNumber  // ✅ Bot inbox
       : cmd === 'vv3' 
         ? ownerNumber  // ✅ Owner inbox
-        : m.from; // Same chat for `.vv`
+        : m.from; // ✅ Normal `.vv` usage (same chat)
 
     if (messageType === 'imageMessage') {
       await Matrix.sendMessage(recipient, { image: buffer, caption });
@@ -67,14 +58,15 @@ const OwnerCmd = async (m, Matrix) => {
       await Matrix.sendMessage(recipient, { video: buffer, caption, mimetype: 'video/mp4' });
     } else if (messageType === 'audioMessage') {  
       await Matrix.sendMessage(recipient, { audio: buffer, mimetype, ptt: true });
-    } else {
-      return m.reply('*Unsupported media type!*');
     }
 
-    // No reply to user about the action (keeps it discreet)
+    // Silent execution for secret mode
+    if (!cmd) return;
+    m.reply('*Media sent successfully!*');
+
   } catch (error) {
     console.error(error);
-    await m.reply('*Failed to process View Once message!*');
+    if (cmd) await m.reply('*Failed to process View Once message!*');
   }
 };
 
