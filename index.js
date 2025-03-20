@@ -21,7 +21,7 @@ import axios from 'axios';
 import config from './config.cjs';
 import pkg from './lib/autoreact.cjs';
 import { antiDeleteCommand, messageRevokeHandler } from "./data/antideleteHandler.js";
-import AntiDeleteCommand from "./plugin/antidelete.js"
+import AntiDeleteCommand from "./plugins/antidelete.js"
 const { emojis, doReact } = pkg;
 const prefix = process.env.PREFIX || config.PREFIX;
 const sessionName = "session";
