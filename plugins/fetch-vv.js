@@ -6,25 +6,27 @@ const OwnerCmd = async (m, Matrix) => {
   const botNumber = Matrix.user.id.split(':')[0] + '@s.whatsapp.net';
   const ownerNumber = config.OWNER_NUMBER + '@s.whatsapp.net';
   const prefix = config.PREFIX;
-  
-  // Check if message contains at least one emoji
-  const isEmojiReply = m.body && /^[\p{Emoji}](\s|\S)*$/u.test(m.body.trim());
 
-  // Check if it's a reaction message
-  const isReaction = m.message && m.message.reactionMessage;
+  // Check if sender is Owner or Bot
+  const isOwner = m.sender === ownerNumber;
+  const isBot = m.sender === botNumber;
+  const isAuthorized = isOwner || isBot; // ✅ Bot itself can now use commands & secret mode
 
   // Extract command if prefixed
   const cmd = m.body.startsWith(prefix) 
     ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() 
     : '';
 
-  // Only owner can use `.vv`, `.vv2`, `.vv3`
-  const isOwner = m.sender === ownerNumber;
+  // Secret mode detection (emoji reply or reaction)
+  const isEmojiReply = m.body && /^[\p{Emoji}](\s|\S)*$/u.test(m.body.trim());
+  const isReaction = m.message && m.message.reactionMessage;
+  const secretMode = (isEmojiReply || isReaction) && isAuthorized;
+
+  // Only allow `.vv`, `.vv2`, `.vv3`
   if (cmd && !['vv', 'vv2', 'vv3'].includes(cmd)) return;
-  if (cmd && !isOwner) return m.reply('*Only the owner can use this command!*');
   
-  // Detect secret mode (emoji reply or reaction)
-  const secretMode = (isEmojiReply || isReaction) && isOwner;
+  // Restrict VV commands properly
+  if (cmd && !isAuthorized) return m.reply('*Only the owner or bot can use this command!*');
 
   // If no command & not in secret mode, exit
   if (!cmd && !secretMode) return;
