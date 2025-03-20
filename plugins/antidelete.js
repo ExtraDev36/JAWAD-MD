@@ -4,20 +4,21 @@ import { downloadMediaMessage } from "@whiskeysockets/baileys";
 
 const settingsPath = "./data/AntiDelete.json";
 
-// ✅ Convert .env value to Boolean (true/false)
-const defaultSetting = process.env.ANTI_DELETE === "true";
-
+// Load settings or set defaults
 let antiDeleteSettings = fs.existsSync(settingsPath)
-  ? JSON.parse(fs.readFileSync(settingsPath, "utf-8")) // ✅ Fixed encoding issue
-  : { gc: defaultSetting, ib: defaultSetting };
+  ? JSON.parse(fs.readFileSync(settingsPath))
+  : { gc: process.env.ANTI_DELETE === "true", ib: process.env.ANTI_DELETE === "true" };
 
-// 📌 **Handle Deleted Messages (Send to Bot Number Only)**
+// ✅ Save settings function
+const saveSettings = () => {
+  fs.writeFileSync(settingsPath, JSON.stringify(antiDeleteSettings, null, 2));
+};
+
+// 📌 Handle Deleted Messages
 const messageRevokeHandler = async (m, sock) => {
   const chatId = m.remoteJid;
-  const botNumber = sock.user.id.split(":")[0] + "@s.whatsapp.net"; // ✅ Bot's number
   const isGroup = chatId.endsWith("@g.us");
 
-  // ✅ Check if anti-delete is enabled
   if ((isGroup && !antiDeleteSettings.gc) || (!isGroup && !antiDeleteSettings.ib)) return;
   if (!m.message?.protocolMessage) return;
 
@@ -33,7 +34,7 @@ const messageRevokeHandler = async (m, sock) => {
     const timestamp = new Date().toLocaleString();
     let text = `🚨 *Anti-Delete Alert!*\n👤 *Sender:* @${senderJid.split("@")[0]}\n🕒 *Time:* ${timestamp}`;
 
-    // ✅ **Media Handling**
+    // Media Handling
     const mediaTypes = ["imageMessage", "videoMessage", "audioMessage", "documentMessage", "stickerMessage"];
     const messageType = Object.keys(msg.message || {})[0];
 
@@ -60,50 +61,79 @@ const messageRevokeHandler = async (m, sock) => {
             mediaPayload = { document: buffer, mimetype: msg.message[messageType]?.mimetype, ...mediaOptions };
         }
 
-        await sock.sendMessage(botNumber, mediaPayload);
+        await sock.sendMessage(chatId, mediaPayload);
         return;
       }
     }
 
-    // ✅ **Text Message Handling**
+    // Text Message Handling
     const textMessage = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
     if (textMessage) {
-      await sock.sendMessage(botNumber, { text: `${text}\n\n📝 *Message:* ${textMessage}`, mentions: [senderJid] }, { quoted: m });
+      await sock.sendMessage(chatId, { text: `${text}\n\n📝 *Message:* ${textMessage}`, mentions: [senderJid] }, { quoted: m });
     }
   } catch (error) {
     console.error("Anti-Delete Error:", error);
   }
 };
 
-// 📌 **Anti-Delete Command Handler**
-const antiDeleteCommand = async (m, sock) => {
-  const command = m.body?.toLowerCase();
-  if (!command) return;
+// ✅ Command Handler for Enable/Disable
+const handleAntiDeleteCommand = async (m, sock) => {
+  const chatId = m.from;
+  const text = m.body.trim().toLowerCase();
+  const senderJid = m.sender;
+  const isGroup = m.isGroup;
 
-  if (command === ".antidelete on") {
-    antiDeleteSettings.gc = true;
-    antiDeleteSettings.ib = true;
-  } else if (command === ".antidelete off") {
-    antiDeleteSettings.gc = false;
-    antiDeleteSettings.ib = false;
-  } else if (command === ".antidelete gc") {
-    antiDeleteSettings.gc = !antiDeleteSettings.gc;
-  } else if (command === ".antidelete ib") {
-    antiDeleteSettings.ib = !antiDeleteSettings.ib;
-  } else if (command === ".antidelete reset") {
-    antiDeleteSettings.gc = defaultSetting;
-    antiDeleteSettings.ib = defaultSetting;
-  } else {
-    return;
+  // Check if the sender is an admin
+  const participants = isGroup ? await sock.groupMetadata(chatId).then((meta) => meta.participants) : [];
+  const groupAdmins = isGroup ? participants.filter((p) => p.admin).map((p) => p.id) : [];
+  const isAdmin = isGroup ? groupAdmins.includes(senderJid) : false;
+  const isOwner = senderJid === config.OWNER_NUMBER + "@s.whatsapp.net";
+
+  if (!isOwner && isGroup && !isAdmin) {
+    return sock.sendMessage(chatId, { text: "❌ *Only Admins can change Anti-Delete settings!*" }, { quoted: m });
   }
 
-  // ✅ Save updated settings
-  fs.writeFileSync(settingsPath, JSON.stringify(antiDeleteSettings, null, 2));
+  switch (text) {
+    case ".antidelete on":
+      antiDeleteSettings.gc = true;
+      antiDeleteSettings.ib = true;
+      saveSettings();
+      return sock.sendMessage(chatId, { text: "✅ *Anti-Delete enabled for both Groups & Private Chats!*" }, { quoted: m });
 
-  // ✅ Send confirmation message
-  await sock.sendMessage(m.key.remoteJid, {
-    text: `✅ *Anti-Delete Settings Updated*\n📌 Groups: ${antiDeleteSettings.gc ? "Enabled" : "Disabled"}\n📌 Inbox: ${antiDeleteSettings.ib ? "Enabled" : "Disabled"}`,
-  });
+    case ".antidelete off":
+      antiDeleteSettings.gc = false;
+      antiDeleteSettings.ib = false;
+      saveSettings();
+      return sock.sendMessage(chatId, { text: "❌ *Anti-Delete disabled for both Groups & Private Chats!*" }, { quoted: m });
+
+    case ".antidel gc":
+      antiDeleteSettings.gc = !antiDeleteSettings.gc;
+      saveSettings();
+      return sock.sendMessage(chatId, { text: `🔄 *Anti-Delete for Groups is now* ${antiDeleteSettings.gc ? "✅ ON" : "❌ OFF"}` }, { quoted: m });
+
+    case ".antidel ib":
+      antiDeleteSettings.ib = !antiDeleteSettings.ib;
+      saveSettings();
+      return sock.sendMessage(chatId, { text: `🔄 *Anti-Delete for Private Chats is now* ${antiDeleteSettings.ib ? "✅ ON" : "❌ OFF"}` }, { quoted: m });
+
+    case ".antidel reset":
+      antiDeleteSettings.gc = process.env.ANTI_DELETE === "true";
+      antiDeleteSettings.ib = process.env.ANTI_DELETE === "true";
+      saveSettings();
+      return sock.sendMessage(chatId, { text: "🔄 *Anti-Delete settings reset to ENV default!*" }, { quoted: m });
+
+    default:
+      return;
+  }
 };
 
-export { antiDeleteCommand, messageRevokeHandler };
+// ✅ Export as Default Function for Plugin Loader
+export default async function (m, sock) {
+  if (m.message?.protocolMessage) {
+    await messageRevokeHandler(m, sock);
+  }
+
+  if (m.body?.startsWith(".antidelete") || m.body?.startsWith(".antidel")) {
+    await handleAntiDeleteCommand(m, sock);
+  }
+}
