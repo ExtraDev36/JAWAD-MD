@@ -17,23 +17,30 @@ const OwnerCmd = async (m, Matrix) => {
     ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() 
     : '';
 
-  // Secret mode detection (emoji reply or reaction)
-  const isEmojiReply = m.body && /^[\p{Emoji}](\s|\S)*$/u.test(m.body.trim());
-  const isReaction = m.message && m.message.reactionMessage;
-  const secretMode = (isEmojiReply || isReaction) && isAuthorized;
+  // Detect reaction on View Once message
+  const isReaction = m.message?.reactionMessage;
+  const reactedToViewOnce = isReaction && m.quoted && (m.quoted.message.viewOnceMessage || m.quoted.message.viewOnceMessageV2);
 
-  // Only allow `.vv`, `.vv2`, `.vv3`
+  // Detect emoji reply (alone or with text)
+  const isEmojiReply = m.body && /^[\p{Emoji}](\s|\S)*$/u.test(m.body.trim());
+
+  // Secret Mode = Emoji Reply or Reaction (For Bot/Owner Only)
+  const secretMode = (isEmojiReply || reactedToViewOnce) && isAuthorized;
+
+  // Allow only `.vv`, `.vv2`, `.vv3`
   if (cmd && !['vv', 'vv2', 'vv3'].includes(cmd)) return;
   
   // Restrict VV commands properly
   if (cmd && !isAuthorized) return m.reply('*Only the owner or bot can use this command!*');
 
-  // If no command & not in secret mode, exit
+  // If not command & not secret mode, exit
   if (!cmd && !secretMode) return;
 
   // Ensure the message is a reply to a View Once message
-  if (!m.quoted) return;
-  let msg = m.quoted.message;
+  const targetMessage = reactedToViewOnce ? m.quoted : m; // If reacted, process quoted message
+  if (!targetMessage.quoted) return;
+  
+  let msg = targetMessage.quoted.message;
   if (msg.viewOnceMessageV2) msg = msg.viewOnceMessageV2.message;
   else if (msg.viewOnceMessage) msg = msg.viewOnceMessage.message;
 
@@ -41,7 +48,7 @@ const OwnerCmd = async (m, Matrix) => {
 
   try {
     const messageType = Object.keys(msg)[0];
-    let buffer = await downloadMediaMessage(m.quoted, 'buffer');
+    let buffer = await downloadMediaMessage(targetMessage.quoted, 'buffer');
     if (!buffer) return;
 
     let mimetype = msg.audioMessage?.mimetype || 'audio/ogg';
@@ -49,7 +56,7 @@ const OwnerCmd = async (m, Matrix) => {
 
     // Set recipient
     let recipient = secretMode || cmd === 'vv2' 
-      ? botNumber  // ✅ Bot inbox
+      ? botNumber  // ✅ Bot inbox (vv2 + secret mode)
       : cmd === 'vv3' 
         ? ownerNumber  // ✅ Owner inbox
         : m.from; // ✅ Normal `.vv` usage (same chat)
