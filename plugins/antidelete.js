@@ -1,5 +1,5 @@
 import fs from "fs";
-import config from "../config.js"; // ✅ Corrected import
+import config from "../config.cjs";
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 
 const settingsPath = "./data/AntiDelete.json";
