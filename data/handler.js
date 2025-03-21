@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import config from '../config.cjs';
 import { smsg } from '../lib/myfunc.cjs';
 import { handleAntilink } from './antilink.js';
-import antiDeleteHandler from './data/antideleteHandler.js';
+import antiDeleteHandler from './antideleteHandler.js';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
