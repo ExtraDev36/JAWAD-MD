@@ -2,7 +2,7 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import fs from 'fs';
 import config from '../config.cjs';
 
-const settingsPath = './mydata/AntiDelete.json';
+const settingsPath = './data/AntiDelete.json';
 let antiDeleteSettings = fs.existsSync(settingsPath)
     ? JSON.parse(fs.readFileSync(settingsPath))
     : {};
