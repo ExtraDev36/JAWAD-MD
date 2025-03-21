@@ -1,30 +1,32 @@
-import config from '../config.cjs';
+import config from "../config.cjs";
 
-const antiDeleteCommand = async (m, sock) => {
-    try {
-        const isCreator = m.sender === config.OWNER_NUMBER + '@s.whatsapp.net';
-        if (!isCreator) return m.reply("*📛 OWNER ONLY COMMAND*");
+const antideleteCommand = async (m, Matrix) => {
+  try {
+    const botNumber = await Matrix.decodeJid(Matrix.user.id);
+    const isCreator = [botNumber, config.OWNER_NUMBER + "@s.whatsapp.net"].includes(m.sender);
+    if (!isCreator) return Matrix.sendMessage(m.from, { text: "*📛 OWNER ONLY COMMAND*" }, { quoted: m });
 
-        const cmd = m.body.trim().split(/\s+/)[0].slice(config.PREFIX.length).toLowerCase();
-        const text = m.body.slice(cmd.length + config.PREFIX.length).trim();
-        let responseMessage;
+    const prefix = config.PREFIX;
+    const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(" ")[0].toLowerCase() : "";
+    const text = m.body.slice(prefix.length + cmd.length).trim();
 
-        if (text === 'on') {
-            config.ANTI_DELETE = true;
-            responseMessage = "✅ *Anti-Delete is now enabled.*\nDeleted messages will be restored!";
-        } else if (text === 'off') {
-            config.ANTI_DELETE = false;
-            responseMessage = "❌ *Anti-Delete is now disabled.*\nDeleted messages will not be recovered.";
-        } else {
-            responseMessage = "⚠️ *Usage:*\n- `.antidelete on` → Enable Anti-Delete\n- `.antidelete off` → Disable Anti-Delete";
-        }
-
-        await sock.sendMessage(m.from, { text: responseMessage }, { quoted: m });
-
-    } catch (error) {
-        console.error("❌ Error in Anti-Delete Command:", error);
-        await sock.sendMessage(m.from, { text: '🚨 *Error processing your request.*' }, { quoted: m });
+    let responseMessage;
+    if (text === "on") {
+      config.ANTI_DELETE = true;
+      responseMessage = "✅ *Anti-Delete is now enabled.*\nDeleted messages will be restored!";
+    } else if (text === "off") {
+      config.ANTI_DELETE = false;
+      responseMessage = "❌ *Anti-Delete is now disabled.*\nDeleted messages will not be recovered.";
+    } else {
+      responseMessage = "⚠️ *Usage:*\n- `.antidelete on` → Enable Anti-Delete\n- `.antidelete off` → Disable Anti-Delete";
     }
+
+    await Matrix.sendMessage(m.from, { text: responseMessage }, { quoted: m });
+
+  } catch (error) {
+    console.error("❌ Error in Anti-Delete Command:", error);
+    await Matrix.sendMessage(m.from, { text: "🚨 *Error processing your request.*" }, { quoted: m });
+  }
 };
 
-export default antiDeleteCommand;
+export default antideleteCommand;
