@@ -1,4 +1,3 @@
 {
-  "gc": true,
-  "ib": true
+    "enabled": false
 }
