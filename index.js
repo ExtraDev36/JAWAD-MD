@@ -20,7 +20,6 @@ import moment from 'moment-timezone';
 import axios from 'axios';
 import config from './config.cjs';
 import pkg from './lib/autoreact.cjs';
-import { antiDeleteCommand, messageRevokeHandler } from "./plugins/antidelete.js";
 const { emojis, doReact } = pkg;
 const prefix = process.env.PREFIX || config.PREFIX;
 const sessionName = "session";
@@ -153,15 +152,7 @@ https://github.com/XdTechPro/JAWAD-MD
             Matrix.public = false;
         }
     
-    
-Matrix.ev.on("messages.upsert", async (chatUpdate) => {
-    await antiDeleteCommand(chatUpdate.messages[0], Matrix);
-});
-
-Matrix.ev.on("messages.delete", async (chatUpdate) => {
-    await messageRevokeHandler(chatUpdate, Matrix);
-});
-        
+            
         Matrix.ev.on('messages.upsert', async (chatUpdate) => {
             try {
                 const mek = chatUpdate.messages[0];
