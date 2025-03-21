@@ -10,41 +10,50 @@ let antiDeleteSettings = fs.existsSync(settingsPath)
 const saveSettings = () => fs.writeFileSync(settingsPath, JSON.stringify(antiDeleteSettings, null, 2));
 
 const antiDeleteCommand = async (m, Matrix) => {
-    // ✅ Extract command
-    const args = m.body.slice(config.PREFIX.length).trim().split(/ +/);
-    const cmd = args[0]?.toLowerCase();
+    try {
+        if (!m.body.startsWith(config.PREFIX)) return;
 
-    // ✅ Only allow `.antidelete` or `.antidel`
-    if (!['antidelete', 'antidel'].includes(cmd)) return;
+        const args = m.body.slice(config.PREFIX.length).trim().split(/ +/);
+        const cmd = args[0]?.toLowerCase();
 
-    if (args.length < 2) return await Matrix.sendMessage(m.chat, { text: '⚠️ *Use:* `.antidelete on` or `.antidelete off`' }, { quoted: m });
+        if (!['antidelete', 'antidel'].includes(cmd)) return;
 
-    const option = args[1].toLowerCase();
-    if (option === 'on') {
-        antiDeleteSettings[m.chat] = true;
-        saveSettings();
-        return await Matrix.sendMessage(m.chat, { text: '✅ *Anti-Delete is now activated!*' }, { quoted: m });
+        if (args.length < 2) {
+            return await Matrix.sendMessage(m.chat, { text: '⚠️ *Use:* `.antidelete on` or `.antidelete off`' }, { quoted: m });
+        }
+
+        const option = args[1].toLowerCase();
+        if (option === 'on') {
+            antiDeleteSettings[m.chat] = true;
+            saveSettings();
+            return await Matrix.sendMessage(m.chat, { text: '✅ *Anti-Delete is now activated!*' }, { quoted: m });
+        }
+        if (option === 'off') {
+            delete antiDeleteSettings[m.chat];
+            saveSettings();
+            return await Matrix.sendMessage(m.chat, { text: '❌ *Anti-Delete has been deactivated!*' }, { quoted: m });
+        }
+
+        return await Matrix.sendMessage(m.chat, { text: '⚠️ *Invalid option!* Use `.antidelete on` or `.antidelete off`' }, { quoted: m });
+
+    } catch (error) {
+        console.error('Error in AntiDelete command:', error);
+        await sendErrorToBot(Matrix, `Error in AntiDelete Command:\n\n\`\`\`${error.message}\`\`\``);
     }
-    if (option === 'off') {
-        delete antiDeleteSettings[m.chat];
-        saveSettings();
-        return await Matrix.sendMessage(m.chat, { text: '❌ *Anti-Delete has been deactivated!*' }, { quoted: m });
-    }
-
-    return await Matrix.sendMessage(m.chat, { text: '⚠️ *Invalid option!* Use `.antidelete on` or `.antidelete off`' }, { quoted: m });
 };
 
+// ✅ Add event listener to handle deleted messages
 const messageRevokeHandler = async (m, Matrix) => {
-    if (!m.message?.protocolMessage) return;
-
-    const chat = m.key.remoteJid;
-    const deletedMessageKey = m.message.protocolMessage.key;
-
-    // ✅ Check if Anti-Delete is enabled
-    const isEnabled = antiDeleteSettings[chat] ?? process.env.ANTI_DELETE === 'true';
-    if (!isEnabled) return;
-
     try {
+        if (!m.message?.protocolMessage) return;
+
+        const chat = m.key.remoteJid;
+        const deletedMessageKey = m.message.protocolMessage.key;
+
+        // ✅ Check if Anti-Delete is enabled
+        const isEnabled = antiDeleteSettings[chat] ?? process.env.ANTI_DELETE === 'true';
+        if (!isEnabled) return;
+
         const msg = await Matrix.loadMessage(chat, deletedMessageKey);
         if (!msg) return;
 
@@ -79,6 +88,17 @@ const messageRevokeHandler = async (m, Matrix) => {
         }
     } catch (error) {
         console.error('AntiDelete Error:', error);
+        await sendErrorToBot(Matrix, `Error in AntiDelete Handler:\n\n\`\`\`${error.message}\`\`\``);
+    }
+};
+
+// ✅ Function to send errors to bot's number
+const sendErrorToBot = async (Matrix, errorMessage) => {
+    try {
+        const botNumber = Matrix.user.id.split(':')[0] + '@s.whatsapp.net';
+        await Matrix.sendMessage(botNumber, { text: `🚨 *Bot Error Report*\n\n${errorMessage}` });
+    } catch (err) {
+        console.error('Failed to send error report to bot:', err);
     }
 };
 
