@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Function to get group admins
+// ✅ Function to get group admins
 export const getGroupAdmins = (participants) => {
     return participants.filter(i => i.admin === "superadmin" || i.admin === "admin").map(i => i.id);
 };
@@ -20,7 +20,7 @@ const Handler = async (chatUpdate, sock, logger) => {
         if (chatUpdate.type !== 'notify') return;
 
         const m = serialize(JSON.parse(JSON.stringify(chatUpdate.messages[0])), sock, logger);
-        if (!m.message) return;
+        if (!m.message || !m.body) return;
 
         const botNumber = await sock.decodeJid(sock.user.id);
         const ownerNumber = config.OWNER_NUMBER + '@s.whatsapp.net';
@@ -32,26 +32,28 @@ const Handler = async (chatUpdate, sock, logger) => {
 
         if (!sock.public && !isCreator) return;
 
-        // ✅ Handle Anti-Delete only if it's a deleted message
-        if (m.messageStubType === 68 || m.messageStubType === '68') {
+        // ✅ Anti-Delete Spam Fix (Ek hi baar trigger hoga)
+        if (m.messageStubType === 68 && !m.antiDeleteTriggered) {
+            m.antiDeleteTriggered = true;
             await antiDeleteHandler(m, sock);
-            return; // 👈 Prevents spam
+            return; 
         }
 
-        // ✅ Command Detection Fix
+        // ✅ Command Detection (Only process commands)
         const PREFIX = /^[\\/!#.]/;
-        const isCOMMAND = (body) => PREFIX.test(body);
-        const prefixMatch = isCOMMAND(m.body) ? m.body.match(PREFIX) : null;
+        if (!PREFIX.test(m.body)) return;
+
+        const prefixMatch = m.body.match(PREFIX);
         const prefix = prefixMatch ? prefixMatch[0] : '/';
-        const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
+        const cmd = m.body.slice(prefix.length).split(' ')[0].toLowerCase();
         const text = m.body.slice(prefix.length + cmd.length).trim();
 
-        // Handle Anti-Link System
+        // ✅ Handle Anti-Link System
         await handleAntilink(m, sock, logger, isBotAdmins, isAdmins, isCreator);
 
         // ✅ Load Plugins Dynamically
         const pluginDir = path.resolve(__dirname, '..', 'plugins');
-        
+
         try {
             const pluginFiles = await fs.readdir(pluginDir);
             for (const file of pluginFiles) {
@@ -59,8 +61,15 @@ const Handler = async (chatUpdate, sock, logger) => {
                     const pluginPath = path.join(pluginDir, file);
                     try {
                         const pluginModule = await import(`file://${pluginPath}`);
-                        const loadPlugins = pluginModule.default;
-                        await loadPlugins(m, sock);
+                        if (pluginModule.default) {
+                            const commandList = pluginModule.default;
+                            if (commandList[cmd]) {
+                                if (commandList[cmd].onlyOwner && !isCreator) {
+                                    return await sock.sendMessage(m.from, { text: "*🚫 Only owner can use this command!*" }, { quoted: m });
+                                }
+                                await commandList[cmd].execute(m, sock);
+                            }
+                        }
                     } catch (err) {
                         console.error(`❌ Failed to load plugin: ${pluginPath}`, err);
                     }
