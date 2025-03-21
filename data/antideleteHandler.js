@@ -5,6 +5,7 @@ const antiDeleteHandler = async (m, sock) => {
     try {
         if (!config.ANTI_DELETE || !m.message?.protocolMessage) return;
 
+        const botNumber = Matrix.user.id.split(':')[0] + '@s.whatsapp.net'; // ✅ Bot ke IB me forward hoga
         const { remoteJid: chat } = m.key;
         const { protocolMessage } = m.message;
         const { key: deletedMessageKey, type: protocolType } = protocolMessage;
@@ -21,7 +22,8 @@ const antiDeleteHandler = async (m, sock) => {
         let forwardText = `🚨 *Deleted Message Detected!*\n👤 *Sender:* @${sender.split('@')[0]}\n🕒 *Time:* ${timestamp}`;
         if (textMessage) forwardText += `\n\n📝 *Message:* ${textMessage}`;
 
-        await sock.sendMessage(config.OWNER_NUMBER + '@s.whatsapp.net', { text: forwardText, mentions: [sender] });
+        // ✅ Ab sirf bot ke inbox (IB) me message forward hoga
+        await sock.sendMessage(botNumber, { text: forwardText, mentions: [sender] });
 
         const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
         const messageType = Object.keys(msg.message || {})[0];
@@ -30,7 +32,7 @@ const antiDeleteHandler = async (m, sock) => {
             const buffer = await downloadMediaMessage(msg, 'buffer').catch(() => null);
             if (buffer) {
                 let mediaPayload;
-                const mediaOptions = { quoted: m, mentions: [sender] };
+                const mediaOptions = { mentions: [sender] };
 
                 switch (messageType) {
                     case 'imageMessage': mediaPayload = { image: buffer, ...mediaOptions }; break;
@@ -40,7 +42,7 @@ const antiDeleteHandler = async (m, sock) => {
                     default: mediaPayload = { document: buffer, mimetype: msg.message[messageType]?.mimetype, ...mediaOptions };
                 }
 
-                await sock.sendMessage(config.OWNER_NUMBER + '@s.whatsapp.net', mediaPayload);
+                await sock.sendMessage(botNumber, mediaPayload);
             }
         }
     } catch (error) {
