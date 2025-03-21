@@ -5,7 +5,7 @@ import config from '../config.cjs';
 import { smsg } from '../lib/myfunc.cjs';
 import { handleAntilink } from './antilink.js';
 import { fileURLToPath } from 'url';
-import { messageRevokeHandler } from '../plugin/antidelete.js';
+import { messageRevokeHandler } from '../plugins/antidelete.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
