@@ -1,4 +1,4 @@
-import generateProfilePicture from '../generateProfilePicture.js';
+import generateProfilePicture from '../media/generateProfilePicture.js';
 import { writeFile, unlink } from 'fs/promises';
 import config from '../config.cjs';
 
