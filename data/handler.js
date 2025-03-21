@@ -39,7 +39,7 @@ const Handler = async (chatUpdate, sock, logger) => {
         await antiDeleteHandler(m, sock);
 
         // ✅ Load Plugins Dynamically
-        const pluginDir = path.resolve(__dirname, '..', 'plugin');
+        const pluginDir = path.resolve(__dirname, '..', 'plugins');
         
         try {
             const pluginFiles = await fs.readdir(pluginDir);
