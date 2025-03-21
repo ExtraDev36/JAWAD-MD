@@ -5,7 +5,6 @@ import config from '../config.cjs';
 import { smsg } from '../lib/myfunc.cjs';
 import { handleAntilink } from './antilink.js';
 import { fileURLToPath } from 'url';
-import { messageRevokeHandler } from '../plugins/antidelete.js'; // ✅ Fix: Correct import
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,7 +29,12 @@ const Handler = async (chatUpdate, sock, logger) => {
 
         // ✅ Auto-detect deleted messages & forward them
         if (m.message.protocolMessage) {
-            await messageRevokeHandler(m, sock); // ✅ Fix: Correct function call
+            try {
+                const { messageRevokeHandler } = await import('../plugins/antidelete.js');
+                await messageRevokeHandler(m, sock);
+            } catch (err) {
+                console.error(`❌ Error in AntiDelete Plugin:`, err);
+            }
             return;
         }
 
@@ -75,10 +79,8 @@ const Handler = async (chatUpdate, sock, logger) => {
                     
                     try {
                         const pluginModule = await import(`file://${pluginPath}`);
-
-                        // ✅ Fix: Check and execute only if function exists
-                        if (pluginModule.antiDeleteCommand) {
-                            await pluginModule.antiDeleteCommand(m, sock);
+                        if (pluginModule.default) {
+                            await pluginModule.default(m, sock);
                         }
                     } catch (err) {
                         console.error(`❌ Failed to load plugin: ${pluginPath}`, err);
