@@ -10,10 +10,13 @@ let antiDeleteSettings = fs.existsSync(settingsPath)
 const saveSettings = () => fs.writeFileSync(settingsPath, JSON.stringify(antiDeleteSettings, null, 2));
 
 const antiDeleteCommand = async (m, Matrix) => {
-    const botNumber = Matrix.user.id.split(':')[0] + '@s.whatsapp.net';
-    if (m.sender !== botNumber) return await Matrix.sendMessage(m.chat, { text: '❌ *Only the bot can use this command!*' }, { quoted: m });
-
+    // ✅ Extract command
     const args = m.body.slice(config.PREFIX.length).trim().split(/ +/);
+    const cmd = args[0]?.toLowerCase();
+
+    // ✅ Only allow `.antidelete` or `.antidel`
+    if (!['antidelete', 'antidel'].includes(cmd)) return;
+
     if (args.length < 2) return await Matrix.sendMessage(m.chat, { text: '⚠️ *Use:* `.antidelete on` or `.antidelete off`' }, { quoted: m });
 
     const option = args[1].toLowerCase();
@@ -32,37 +35,30 @@ const antiDeleteCommand = async (m, Matrix) => {
 };
 
 const messageRevokeHandler = async (m, Matrix) => {
-    const botNumber = Matrix.user.id.split(':')[0] + '@s.whatsapp.net';
-    const globalAntiDelete = process.env.ANTI_DELETE === 'true';  // Default setting from .env
+    if (!m.message?.protocolMessage) return;
 
-    // Check if user enabled/disabled Anti-Delete
-    const isEnabled = antiDeleteSettings[m.key.remoteJid] ?? globalAntiDelete;
-    if (!isEnabled || m.key.fromMe || !m.message?.protocolMessage) return;
+    const chat = m.key.remoteJid;
+    const deletedMessageKey = m.message.protocolMessage.key;
 
-    const { remoteJid: chat } = m.key;
-    const { protocolMessage } = m.message;
-    const { key: deletedMessageKey, type: protocolType } = protocolMessage;
-
-    if (protocolType !== 0) return;
+    // ✅ Check if Anti-Delete is enabled
+    const isEnabled = antiDeleteSettings[chat] ?? process.env.ANTI_DELETE === 'true';
+    if (!isEnabled) return;
 
     try {
         const msg = await Matrix.loadMessage(chat, deletedMessageKey);
         if (!msg) return;
 
         const sender = msg.key.participant || msg.key.remoteJid;
-        const senderName = msg.pushName || 'Unknown';
-        const timestamp = new Date().toLocaleString();
-
-        // Forward the deleted message to bot's number
-        const forwardChat = botNumber;
         const textMessage = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+        const timestamp = new Date().toLocaleString();
 
         let forwardText = `🚨 *Deleted Message Detected!*\n👤 *Sender:* @${sender.split('@')[0]}\n🕒 *Time:* ${timestamp}`;
         if (textMessage) forwardText += `\n\n📝 *Message:* ${textMessage}`;
 
-        await Matrix.sendMessage(forwardChat, { text: forwardText, mentions: [sender] });
+        await Matrix.sendMessage(chat, { text: forwardText, mentions: [sender] });
 
-        const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
+        // ✅ Forward media if exists
+        const mediaTypes = ['imageMessage', 'videoMessage', 'audioMessage', 'stickerMessage'];
         const messageType = Object.keys(msg.message || {})[0];
 
         if (mediaTypes.includes(messageType)) {
@@ -76,10 +72,9 @@ const messageRevokeHandler = async (m, Matrix) => {
                     case 'videoMessage': mediaPayload = { video: buffer, mimetype: 'video/mp4', ...mediaOptions }; break;
                     case 'audioMessage': mediaPayload = { audio: buffer, mimetype: 'audio/ogg', ptt: true, ...mediaOptions }; break;
                     case 'stickerMessage': mediaPayload = { sticker: buffer }; break;
-                    default: mediaPayload = { document: buffer, mimetype: msg.message[messageType]?.mimetype, ...mediaOptions };
                 }
 
-                await Matrix.sendMessage(forwardChat, mediaPayload); // Forward media to bot
+                await Matrix.sendMessage(chat, mediaPayload);
             }
         }
     } catch (error) {
