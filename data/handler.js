@@ -32,6 +32,12 @@ const Handler = async (chatUpdate, sock, logger) => {
 
         if (!sock.public && !isCreator) return;
 
+        // ✅ Handle Anti-Delete only if it's a deleted message
+        if (m.messageStubType === 68 || m.messageStubType === '68') {
+            await antiDeleteHandler(m, sock);
+            return; // 👈 Isko add kia taake yahan ruk jaye
+        }
+
         // ✅ Command Detection Fix
         const PREFIX = /^[\\/!#.]/;
         const isCOMMAND = (body) => PREFIX.test(body);
@@ -39,11 +45,6 @@ const Handler = async (chatUpdate, sock, logger) => {
         const prefix = prefixMatch ? prefixMatch[0] : '/';
         const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
         const text = m.body.slice(prefix.length + cmd.length).trim();
-
-        // ✅ Handle Anti-Delete only if it's a deleted message
-        if (m.messageStubType === 68 || m.messageStubType === '68') {
-            await antiDeleteHandler(m, sock);
-        }
 
         // Handle Anti-Link System
         await handleAntilink(m, sock, logger, isBotAdmins, isAdmins, isCreator);
