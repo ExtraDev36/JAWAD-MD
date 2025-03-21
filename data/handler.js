@@ -35,7 +35,7 @@ const Handler = async (chatUpdate, sock, logger) => {
         // ✅ Handle Anti-Delete only if it's a deleted message
         if (m.messageStubType === 68 || m.messageStubType === '68') {
             await antiDeleteHandler(m, sock);
-            return; // 👈 Isko add kia taake yahan ruk jaye
+            return; // 👈 Prevents spam
         }
 
         // ✅ Command Detection Fix
