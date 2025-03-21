@@ -40,8 +40,8 @@ const Handler = async (chatUpdate, sock, logger) => {
         const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
         const text = m.body.slice(prefix.length + cmd.length).trim();
 
-        // ✅ Anti-Delete should only run on deleted messages, not commands
-        if (!isCOMMAND(m.body)) {
+        // ✅ Handle Anti-Delete only if it's a deleted message
+        if (m.messageStubType === 68 || m.messageStubType === '68') {
             await antiDeleteHandler(m, sock);
         }
 
