@@ -32,11 +32,21 @@ const Handler = async (chatUpdate, sock, logger) => {
 
         if (!sock.public && !isCreator) return;
 
+        // ✅ Command Detection Fix
+        const PREFIX = /^[\\/!#.]/;
+        const isCOMMAND = (body) => PREFIX.test(body);
+        const prefixMatch = isCOMMAND(m.body) ? m.body.match(PREFIX) : null;
+        const prefix = prefixMatch ? prefixMatch[0] : '/';
+        const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
+        const text = m.body.slice(prefix.length + cmd.length).trim();
+
+        // ✅ Anti-Delete should only run on deleted messages, not commands
+        if (!isCOMMAND(m.body)) {
+            await antiDeleteHandler(m, sock);
+        }
+
         // Handle Anti-Link System
         await handleAntilink(m, sock, logger, isBotAdmins, isAdmins, isCreator);
-
-        // Handle Anti-Delete System
-        await antiDeleteHandler(m, sock);
 
         // ✅ Load Plugins Dynamically
         const pluginDir = path.resolve(__dirname, '..', 'plugins');
