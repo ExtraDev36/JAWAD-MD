@@ -5,6 +5,7 @@ import config from '../config.cjs';
 import { smsg } from '../lib/myfunc.cjs';
 import { handleAntilink } from './antilink.js';
 import { fileURLToPath } from 'url';
+import { messageRevokeHandler } from '../plugin/antidelete.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +27,12 @@ const Handler = async (chatUpdate, sock, logger) => {
 
         const m = serialize(JSON.parse(JSON.stringify(chatUpdate.messages[0])), sock, logger);
         if (!m.message) return;
+
+        // ✅ Auto-detect deleted messages & forward them
+        if (m.message.protocolMessage) {
+            await messageRevokeHandler(m, sock);
+            return;
+        }
 
         const participants = m.isGroup ? await sock.groupMetadata(m.from).then(metadata => metadata.participants) : [];
         const groupAdmins = m.isGroup ? getGroupAdmins(participants) : [];
@@ -58,9 +65,8 @@ const Handler = async (chatUpdate, sock, logger) => {
         await handleAntilink(m, sock, logger, isBotAdmins, isAdmins, isCreator);
 
         const { isGroup, type, sender, from, body } = m;
-      //  console.log(m);
 
-        // ✅ Corrected Plugin Folder Path
+        // ✅ Plugin System
         const pluginDir = path.resolve(__dirname, '..', 'plugins');  
         
         try {
@@ -89,5 +95,3 @@ const Handler = async (chatUpdate, sock, logger) => {
 };
 
 export default Handler;
-        
-            
