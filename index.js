@@ -206,6 +206,11 @@ https://github.com/XdTechPro/JAWAD-MD
     }
 });
 
+} catch (error) {
+    console.error('Critical Error:', error);
+    process.exit(1);
+}
+
 async function init() {
     if (fs.existsSync(credsPath)) {
         console.log("🔒 Session file found, proceeding without QR code.");
