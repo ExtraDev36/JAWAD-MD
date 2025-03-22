@@ -206,6 +206,9 @@ https://github.com/XdTechPro/JAWAD-MD
     }
 });
 
+// 🔹 Keeping your original error handling
+try {
+    // Any additional startup logic (if needed)
 } catch (error) {
     console.error('Critical Error:', error);
     process.exit(1);
