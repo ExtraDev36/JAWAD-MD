@@ -20,6 +20,7 @@ import moment from 'moment-timezone';
 import axios from 'axios';
 import config from './config.cjs';
 import pkg from './lib/autoreact.cjs';
+
 const { emojis, doReact } = pkg;
 const prefix = process.env.PREFIX || config.PREFIX;
 const sessionName = "session";
@@ -30,9 +31,7 @@ let useQR = false;
 let initialConnection = true;
 const PORT = process.env.PORT || 3000;
 
-const MAIN_LOGGER = pino({
-    timestamp: () => `,"time":"${new Date().toJSON()}"`
-});
+const MAIN_LOGGER = pino({ timestamp: () => `,"time":"${new Date().toJSON()}"` });
 const logger = MAIN_LOGGER.child({});
 logger.level = "trace";
 
@@ -90,7 +89,7 @@ async function start() {
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
         const { version, isLatest } = await fetchLatestBaileysVersion();
         console.log(`🤖 JAWAD-MD using WA v${version.join('.')}, isLatest: ${isLatest}`);
-        
+
         const Matrix = makeWASocket({
             version,
             logger: pino({ level: 'silent' }),
@@ -98,26 +97,22 @@ async function start() {
             browser: ["JAWAD-MD", "safari", "3.3"],
             auth: state,
             getMessage: async (key) => {
-                if (store) {
-                    const msg = await store.loadMessage(key.remoteJid, key.id);
-                    return msg.message || undefined;
-                }
                 return { conversation: "JAWAD-MD whatsapp user bot" };
             }
         });
 
-Matrix.ev.on('connection.update', (update) => {
-    const { connection, lastDisconnect } = update;
-    if (connection === 'close') {
-        if (lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut) {
-            start();
-        }
-    } else if (connection === 'open') {
-        if (initialConnection) {
-            console.log(chalk.green("Connected Successfully KHAN-MD 🤍"));
-            Matrix.sendMessage(Matrix.user.id, { 
-                image: { url: "https://files.catbox.moe/pf270b.jpg" }, 
-                caption: `*Hello there JAWAD-MD User! 👋🏻* 
+        Matrix.ev.on('connection.update', (update) => {
+            const { connection, lastDisconnect } = update;
+            if (connection === 'close') {
+                if (lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut) {
+                    start();
+                }
+            } else if (connection === 'open') {
+                if (initialConnection) {
+                    console.log(chalk.green("Connected Successfully KHAN-MD 🤍"));
+                    Matrix.sendMessage(Matrix.user.id, {
+                        image: { url: "https://files.catbox.moe/pf270b.jpg" },
+                        caption: `*Hello there JAWAD-MD User! 👋🏻* 
 
 > Simple, Straightforward, But Loaded With Features 🎊. Meet JAWAD-MD WhatsApp Bot.
 
@@ -132,16 +127,15 @@ Don't forget to give a star to the repo ⬇️
 https://github.com/XdTechPro/JAWAD-MD
 
 > © Powered BY JawadTechX 🖤`
-            });
-            initialConnection = false;
-        } else {
-            console.log(chalk.blue("♻️ Connection reestablished after restart."));
-        }
-    }
-});
-        
-        Matrix.ev.on('creds.update', saveCreds);
+                    });
+                    initialConnection = false;
+                } else {
+                    console.log(chalk.blue("♻️ Connection reestablished after restart."));
+                }
+            }
+        });
 
+        Matrix.ev.on('creds.update', saveCreds);
         Matrix.ev.on("messages.upsert", async chatUpdate => await Handler(chatUpdate, Matrix, logger));
         Matrix.ev.on("call", async (json) => await Callupdate(json, Matrix));
         Matrix.ev.on("group-participants.update", async (messag) => await GroupUpdate(Matrix, messag));
@@ -151,67 +145,52 @@ https://github.com/XdTechPro/JAWAD-MD
         } else if (config.MODE === "private") {
             Matrix.public = false;
         }
-    
-            
+
+        // Merged Auto-Reaction, Auto-Status Seen, and Auto-Status Reply
         Matrix.ev.on('messages.upsert', async (chatUpdate) => {
             try {
                 const mek = chatUpdate.messages[0];
-                console.log(mek);
+                if (!mek || !mek.message) return;
+                if (mek.key.fromMe) return;
+                if (mek.message?.protocolMessage || mek.message?.ephemeralMessage || mek.message?.reactionMessage) return;
+
+                const fromJid = mek.key.participant || mek.key.remoteJid;
+
+                // Auto Reaction
                 if (!mek.key.fromMe && config.AUTO_REACT) {
-                    console.log(mek);
-                    if (mek.message) {
-                        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-                        await doReact(randomEmoji, mek, Matrix);
+                    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+                    await doReact(randomEmoji, mek, Matrix);
+                }
+
+                // Auto Status Seen & Reply
+                if (mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN) {
+                    await Matrix.readMessages([mek.key]);
+
+                    if (config.AUTO_STATUS_REPLY) {
+                        const customMessage = config.STATUS_READ_MSG || '✅ Auto Status Seen Bot By JAWAD-MD';
+                        await Matrix.sendMessage(fromJid, { text: customMessage }, { quoted: mek });
                     }
                 }
+
+                // Auto Status Reaction
+                if (mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REACT === "true") {
+                    const emojiList = ['🧩', '🍉', '💜', '🌸', '🪴', '💊', '💫', '🍂', '🌟', '🎋', '😶‍🌫️', '🫀', '🧿', '👀', '🤖', '🚩', '🥰', '🗿', '💜', '💙', '🌝', '🖤', '💚'];
+                    const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
+
+                    await Matrix.sendMessage(mek.key.remoteJid, {
+                        react: { text: randomEmoji, key: mek.key }
+                    });
+                }
+
             } catch (err) {
-                console.error('Error during auto reaction:', err);
+                console.error('Error handling messages.upsert event:', err);
             }
         });
-        
-        Matrix.ev.on('messages.upsert', async (chatUpdate) => {
-    try {
-        const mek = chatUpdate.messages[0];
-        if (!mek || !mek.message) return;
-        if (mek.key.fromMe) return;
-        if (mek.message?.protocolMessage || mek.message?.ephemeralMessage || mek.message?.reactionMessage) return;
 
-        const fromJid = mek.key.participant || mek.key.remoteJid;
-
-        // Auto Status Seen & Reply
-        if (mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN) {
-            await Matrix.readMessages([mek.key]);
-
-            if (config.AUTO_STATUS_REPLY) {
-                const customMessage = config.STATUS_READ_MSG || '✅ Auto Status Seen Bot By JAWAD-MD';
-                await Matrix.sendMessage(fromJid, { text: customMessage }, { quoted: mek });
-            }
-        }
-
-        // Auto Status Reaction
-        if (mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REACT === "true") {
-            const emojis = ['🧩', '🍉', '💜', '🌸', '🪴', '💊', '💫', '🍂', '🌟', '🎋', '😶‍🌫️', '🫀', '🧿', '👀', '🤖', '🚩', '🥰', '🗿', '💜', '💙', '🌝', '🖤', '💚'];
-            const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-            
-            await Matrix.sendMessage(mek.key.remoteJid, {
-                react: {
-                    text: randomEmoji,
-                    key: mek.key,
-                }
-            }, { statusJidList: [mek.key.participant] });
-        }
-
-    } catch (err) {
-        console.error('Error handling messages.upsert event:', err);
+    } catch (error) {
+        console.error('Critical Error:', error);
+        process.exit(1);
     }
-});
-
-// 🔹 Keeping your original error handling
-try {
-    // Any additional startup logic (if needed)
-} catch (error) {
-    console.error('Critical Error:', error);
-    process.exit(1);
 }
 
 async function init() {
@@ -221,10 +200,8 @@ async function init() {
     } else {
         const sessionDownloaded = await downloadSessionData();
         if (sessionDownloaded) {
-            console.log("🔒 Session downloaded, starting bot.");
             await start();
         } else {
-            console.log("No session found or downloaded, QR code will be printed for authentication.");
             useQR = true;
             await start();
         }
@@ -232,13 +209,5 @@ async function init() {
 }
 
 init();
-
-app.get('/', (req, res) => {
-    res.send('Hello World!');
-});
-
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
-
-
+app.get('/', (req, res) => res.send('Hello World!'));
+app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
