@@ -172,28 +172,39 @@ https://github.com/XdTechPro/JAWAD-MD
         Matrix.ev.on('messages.upsert', async (chatUpdate) => {
     try {
         const mek = chatUpdate.messages[0];
-        const fromJid = mek.key.participant || mek.key.remoteJid;
         if (!mek || !mek.message) return;
         if (mek.key.fromMe) return;
-        if (mek.message?.protocolMessage || mek.message?.ephemeralMessage || mek.message?.reactionMessage) return; 
-        if (mek.key && mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN) {
+        if (mek.message?.protocolMessage || mek.message?.ephemeralMessage || mek.message?.reactionMessage) return;
+
+        const fromJid = mek.key.participant || mek.key.remoteJid;
+
+        // Auto Status Seen & Reply
+        if (mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_SEEN) {
             await Matrix.readMessages([mek.key]);
-            
+
             if (config.AUTO_STATUS_REPLY) {
                 const customMessage = config.STATUS_READ_MSG || '✅ Auto Status Seen Bot By JAWAD-MD';
                 await Matrix.sendMessage(fromJid, { text: customMessage }, { quoted: mek });
             }
         }
+
+        // Auto Status Reaction
+        if (mek.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REACT === "true") {
+            const emojis = ['🧩', '🍉', '💜', '🌸', '🪴', '💊', '💫', '🍂', '🌟', '🎋', '😶‍🌫️', '🫀', '🧿', '👀', '🤖', '🚩', '🥰', '🗿', '💜', '💙', '🌝', '🖤', '💚'];
+            const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+            
+            await Matrix.sendMessage(mek.key.remoteJid, {
+                react: {
+                    text: randomEmoji,
+                    key: mek.key,
+                }
+            }, { statusJidList: [mek.key.participant] });
+        }
+
     } catch (err) {
         console.error('Error handling messages.upsert event:', err);
     }
 });
-
-    } catch (error) {
-        console.error('Critical Error:', error);
-        process.exit(1);
-    }
-}
 
 async function init() {
     if (fs.existsSync(credsPath)) {
