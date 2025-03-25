@@ -1,6 +1,6 @@
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import Jimp from 'jimp';
-import config from '../../config.cjs';
+import config from '../config.cjs';
 
 const updateGroupPicture = async (m, sock) => {
   const prefix = config.PREFIX;
