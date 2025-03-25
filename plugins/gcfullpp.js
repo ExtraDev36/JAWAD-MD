@@ -1,64 +1,90 @@
-import generateProfilePicture from '../media/generateProfilePicture.js'; 
-import { writeFile, unlink } from 'fs/promises';
-import config from '../config.cjs';
+import { downloadMediaMessage } from '@whiskeysockets/baileys';
+import Jimp from 'jimp';
+import config from '../../config.cjs';
 
-const setProfilePictureGroup = async (m, gss) => {
+const updateGroupPicture = async (m, sock) => {
   const prefix = config.PREFIX;
-const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
-const text = m.body.slice(prefix.length + cmd.length).trim();
+  const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
+  
+  if (cmd !== "gcpp") return;
 
-  const validCommands = ['setppfullgroup', 'setfullprofilepicgc', 'fullppgc'];
+  // Check if the message is from a group
+  if (!m.isGroup) {
+    return m.reply("❌ This command can only be used in groups.");
+  }
 
-  if (validCommands.includes(cmd)) {
-    
-    if (!m.isGroup) return m.reply("*📛 THIS COMMAND CAN ONLY BE USED IN GROUPS*");
-    const groupMetadata = await gss.groupMetadata(m.from);
-    const participants = groupMetadata.participants;
-    const botNumber = await gss.decodeJid(gss.user.id);
-    const botAdmin = participants.find(p => p.id === botNumber)?.admin;
-    const senderAdmin = participants.find(p => p.id === m.sender)?.admin;
+  // Check if user is a group admin
+  const groupMetadata = await sock.groupMetadata(m.from);
+  const participant = groupMetadata.participants.find(p => p.id === m.sender);
+  if (!participant?.admin) {
+    return m.reply("❌ You must be a group admin to use this command.");
+  }
 
-    if (!botAdmin) return m.reply("*📛 BOT MUST BE AN ADMIN TO USE THIS COMMAND*");
-    if (!senderAdmin) return m.reply("*📛 YOU MUST BE AN ADMIN TO USE THIS COMMAND*");
-    if (!m.quoted || m.quoted.mtype !== 'imageMessage') {
-      return m.reply(`Send/Reply with an image to set your profile picture ${prefix + cmd}`);
-    }
+  // Check if the replied message is an image
+  if (!m.quoted?.message?.imageMessage) {
+    return m.reply("⚠️ Please *reply to an image* to set as group profile picture.");
+  }
 
-    try {
-      const media = await m.quoted.download(); // Download the media from the quoted message
-      if (!media) throw new Error('Failed to download media.');
+  await m.React('⏳'); // Loading reaction
 
-      const filePath = `./${Date.now()}.png`;
-      await writeFile(filePath, media);
-
+  try {
+    // Download the image with retry mechanism
+    let media;
+    for (let i = 0; i < 3; i++) {
       try {
-        const { img } = await generateProfilePicture(media); // Generate profile picture
-        await gss.query({
-          tag: 'iq',
-          attrs: {
-            to: m.from,
-            type: 'set',
-            xmlns: 'w:profile:picture'
-          },
-          content: [{
-            tag: 'picture',
-            attrs: {
-              type: 'image'
-            },
-            content: img
-          }]
-        });
-        m.reply('Profile picture updated successfully.');
-      } catch (err) {
-        throw err;
-      } finally {
-        await unlink(filePath); // Clean up the downloaded file
+        media = await downloadMediaMessage(m.quoted, 'buffer', {});
+        if (media) break;
+      } catch (error) {
+        if (i === 2) {
+          await m.React('❌');
+          return m.reply("❌ Failed to download image. Try again.");
+        }
       }
-    } catch (error) {
-      console.error('Error setting profile picture:', error);
-      m.reply('Error setting profile picture.');
     }
+
+    // Process image
+    const image = await Jimp.read(media);
+    if (!image) throw new Error("Invalid image format");
+
+    // Make square if needed
+    const size = Math.max(image.bitmap.width, image.bitmap.height);
+    if (image.bitmap.width !== image.bitmap.height) {
+      const squareImage = new Jimp(size, size, 0x000000FF);
+      squareImage.composite(image, (size - image.bitmap.width) / 2, (size - image.bitmap.height) / 2);
+      image.clone(squareImage);
+    }
+
+    // Resize to WhatsApp requirements (512x512 recommended for groups)
+    image.resize(512, 512);
+    const buffer = await image.getBufferAsync(Jimp.MIME_JPEG);
+
+    // Update group profile picture
+    await sock.updateProfilePicture(m.from, buffer);
+    await m.React('✅');
+
+    // Success response
+    return sock.sendMessage(
+      m.from,
+      {
+        text: "✅ *Group profile picture updated successfully!*",
+        contextInfo: {
+          mentionedJid: [m.sender],
+          forwardingScore: 999,
+          isForwarded: true,
+          forwardedNewsletterMessageInfo: {
+            newsletterJid: '120363398040175935@newsletter',
+            newsletterName: "JawadTechX",
+            serverMessageId: 143
+          }
+        }
+      },
+      { quoted: m }
+    );
+  } catch (error) {
+    console.error("Error setting group profile picture:", error);
+    await m.React('❌');
+    return m.reply("❌ An error occurred while updating the group profile picture.");
   }
 };
 
-export default setProfilePictureGroup;
+export default updateGroupPicture;
