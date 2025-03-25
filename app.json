@@ -16,6 +16,21 @@
       "required": true,
       "value": "public"
     },
+    "BOT_NAME": {
+      "description": "change bot name what you want!",
+      "required": false,
+      "value": "JAWAD-MD"
+    },
+    "MENU_IMAGE": {
+      "description": "change menu image if want otherwise use default",
+      "required": false,
+      "value": "https://files.catbox.moe/4udzp4.jpg"
+    },
+    "DESCRIPTION": {
+      "description": "add caption for menu and etc",
+      "required": false,
+      "value": "© ᴘᴏᴡᴇʀᴇᴅ ʙʏ Jᴀᴡᴀᴅ TᴇᴄʜX"
+    },
     "ANTI_DELETE": {
       "description": "make it true for use anti delete",
       "required": true,

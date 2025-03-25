@@ -207,7 +207,8 @@ const menu = async (m, Matrix) => {
 ┃◈┃• instastalk
 ┃◈┃• githubstalk
 ┃◈└───────────┈⊷
-╰──────────────┈⊷`;
+╰──────────────┈⊷
+> *${config.DESCRIPTION}*`;
 
     // Check if MENU_IMAGE exists in config and is not empty
     let menuImage;

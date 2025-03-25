@@ -1,4 +1,4 @@
-import config from "../../config.cjs";
+import config from "../config.cjs";
 import axios from "axios";
 import fs from "fs";
 import path from "path";
