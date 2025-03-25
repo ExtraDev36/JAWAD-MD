@@ -1,56 +1,84 @@
-import generateProfilePicture from '../media/generateProfilePicture.js';
-import { writeFile, unlink } from 'fs/promises';
+import { downloadMediaMessage } from '@whiskeysockets/baileys';
+import Jimp from 'jimp';
 import config from '../config.cjs';
 
-const setProfilePicture = async (m, gss) => {
-  const botNumber = await gss.decodeJid(gss.user.id);
-  const isCreator = [botNumber, config.OWNER_NUMBER + '@s.whatsapp.net'].includes(m.sender);
+const setProfilePicture = async (m, sock) => {
+  const botNumber = await sock.decodeJid(sock.user.id);
+  const isBot = m.sender === botNumber;
   const prefix = config.PREFIX;
-const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
-const text = m.body.slice(prefix.length + cmd.length).trim();
+  const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
 
-  const validCommands = ['setppfull', 'setfullprofilepic', 'fullpp', 'setppbot'];
+  if (cmd !== "fullpp") return;
 
-  if (validCommands.includes(cmd)) {
-    if (!isCreator) return m.reply("*📛 THIS IS AN OWNER COMMAND*");
-    if (!m.quoted || m.quoted.mtype !== 'imageMessage') {
-      return m.reply(`Send/Reply with an image to set your profile picture ${prefix + cmd}`);
-    }
+  // Only bot can use this command
+  if (!isBot) {
+    return m.reply("❌ This command can only be used by the bot itself.");
+  }
 
-    try {
-      const media = await m.quoted.download(); // Download the media from the quoted message
-      if (!media) throw new Error('Failed to download media.');
+  // Check if the replied message is an image
+  if (!m.quoted?.message?.imageMessage) {
+    return m.reply("⚠️ Please *reply to an image* to set as profile picture.");
+  }
 
-      const filePath = `./${Date.now()}.png`;
-      await writeFile(filePath, media);
+  await m.React('⏳'); // Loading reaction
 
+  try {
+    // Download the image with retry mechanism
+    let media;
+    for (let i = 0; i < 3; i++) {
       try {
-        const { img } = await generateProfilePicture(media); // Generate profile picture
-        await gss.query({
-          tag: 'iq',
-          attrs: {
-            to: botNumber,
-            type: 'set',
-            xmlns: 'w:profile:picture'
-          },
-          content: [{
-            tag: 'picture',
-            attrs: {
-              type: 'image'
-            },
-            content: img
-          }]
-        });
-        m.reply('Profile picture updated successfully.');
-      } catch (err) {
-        throw err;
-      } finally {
-        await unlink(filePath); // Clean up the downloaded file
+        media = await downloadMediaMessage(m.quoted, 'buffer');
+        if (media) break;
+      } catch (error) {
+        if (i === 2) {
+          await m.React('❌');
+          return m.reply("❌ Failed to download image. Try again.");
+        }
       }
-    } catch (error) {
-      console.error('Error setting profile picture:', error);
-      m.reply('Error setting profile picture.');
     }
+
+    // Process image
+    const image = await Jimp.read(media);
+    if (!image) throw new Error("Invalid image format");
+
+    // Make square if needed
+    const size = Math.max(image.bitmap.width, image.bitmap.height);
+    if (image.bitmap.width !== image.bitmap.height) {
+      const squareImage = new Jimp(size, size, 0x000000FF);
+      squareImage.composite(image, (size - image.bitmap.width) / 2, (size - image.bitmap.height) / 2);
+      image.clone(squareImage);
+    }
+
+    // Resize to WhatsApp requirements
+    image.resize(640, 640);
+    const buffer = await image.getBufferAsync(Jimp.MIME_JPEG);
+
+    // Update profile picture
+    await sock.updateProfilePicture(botNumber, buffer); // Always set bot's own PP
+    await m.React('✅');
+
+    // Success response
+    return sock.sendMessage(
+      m.from,
+      {
+        text: "✅ *Profile Picture Updated successfully!*",
+        contextInfo: {
+          mentionedJid: [m.sender],
+          forwardingScore: 999,
+          isForwarded: true,
+          forwardedNewsletterMessageInfo: {
+            newsletterJid: '120363316555500484@newsletter',
+            newsletterName: "JawadTechX",
+            serverMessageId: 143
+          }
+        }
+      },
+      { quoted: m }
+    );
+  } catch (error) {
+    console.error("Error setting profile picture:", error);
+    await m.React('❌');
+    return m.reply("❌ An error occurred while updating the profile picture.");
   }
 };
 
