@@ -5,25 +5,24 @@ import path from "path";
 import AdmZip from "adm-zip";
 
 const update = async (m, sock) => {
+  const botNumber = await sock.decodeJid(sock.user.id);
+  const isAllowed = [botNumber, ...config.OWNER_NUMBER.map(num => num + '@s.whatsapp.net')].includes(m.sender);
   const prefix = config.PREFIX;
   const cmd = m.body.startsWith(prefix)
     ? m.body.slice(prefix.length).split(" ")[0].toLowerCase()
     : "";
 
   if (cmd === "update") {
-    if (!config.OWNER_NUMBER.includes(m.sender.split("@")[0])) {
-      return sock.sendMessage(m.from, { text: "❌ *Only the bot owner can use this command!*" }, { quoted: m });
+    if (!isAllowed) {
+      return sock.sendMessage(m.from, { text: "❌ *Only the bot owner or bot itself can use this command!*" }, { quoted: m });
     }
 
-    await m.React("⏳"); // React with a loading icon
+    await m.React("⏳");
 
     try {
       console.log("🔄 Checking for JAWAD-MD updates...");
-      
-      // Send initial message
       const msg = await sock.sendMessage(m.from, { text: "```🔍 Checking for JAWAD-MD updates...```" }, { quoted: m });
 
-      // Function to edit the message smoothly
       const editMessage = async (newText) => {
         try {
           await sock.sendMessage(m.from, { text: newText, edit: msg.key });
@@ -47,7 +46,7 @@ const update = async (m, sock) => {
       console.log("📥 Latest commit:", latestCommitHash);
 
       if (latestCommitHash === currentHash) {
-        await m.React("✅"); // React with success icon
+        await m.React("✅");
         return editMessage("```✅ JAWAD-MD is already up to date!```");
       }
 
@@ -68,12 +67,12 @@ const update = async (m, sock) => {
       const zip = new AdmZip(zipPath);
       zip.extractAllTo(extractPath, true);
       console.log("📂 ZIP extracted.");
-      await editMessage("```🔄 Replacing files...```");
+      await editMessage("```🔄 Replacing files (skipping configs)...```");
 
-      // Replace files
+      // Replace files while skipping important configs
       const sourcePath = path.join(extractPath, "JAWAD-MD-main");
-      copyFolderSync(sourcePath, process.cwd());
-      console.log("✅ Files replaced.");
+      copyFolderSync(sourcePath, process.cwd(), ['package.json', 'config.cjs', '.env']);
+      console.log("✅ Files replaced (configs preserved).");
 
       // Cleanup
       fs.unlinkSync(zipPath);
@@ -82,36 +81,34 @@ const update = async (m, sock) => {
 
       await editMessage("```♻️ Restarting the bot to apply updates...```");
 
-      process.exit(0); // Restart bot
+      process.exit(0);
     } catch (error) {
       console.error("❌ Update error:", error);
-      await m.React("❌"); // React with an error icon
+      await m.React("❌");
       await sock.sendMessage(m.from, { text: "❌ Update failed. Please try manually." }, { quoted: m });
     }
   }
 };
 
-// Helper function to copy directories and files while skipping specific files
-function copyFolderSync(source, target) {
+// Modified helper function to skip specific files
+function copyFolderSync(source, target, filesToSkip = []) {
   if (!fs.existsSync(target)) {
     fs.mkdirSync(target, { recursive: true });
   }
 
   const items = fs.readdirSync(source);
-  const filesToSkip = ['package.json', 'config.cjs', '.env'];
-  
   for (const item of items) {
-    // Skip if the item is in our skip list
+    const srcPath = path.join(source, item);
+    const destPath = path.join(target, item);
+
+    // Skip if the file is in our skip list
     if (filesToSkip.includes(item)) {
       console.log(`⏩ Skipping ${item}`);
       continue;
     }
 
-    const srcPath = path.join(source, item);
-    const destPath = path.join(target, item);
-
     if (fs.lstatSync(srcPath).isDirectory()) {
-      copyFolderSync(srcPath, destPath);
+      copyFolderSync(srcPath, destPath, filesToSkip);
     } else {
       fs.copyFileSync(srcPath, destPath);
     }
