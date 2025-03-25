@@ -10,7 +10,7 @@ const OwnerCmd = async (m, Matrix) => {
   // Check if sender is Owner or Bot
   const isOwner = m.sender === ownerNumber;
   const isBot = m.sender === botNumber;
-  const isAuthorized = isOwner || isBot; // ✅ Bot itself can now use commands & secret mode
+  const isAuthorized = isOwner || isBot;
 
   // Extract command if prefixed
   const cmd = m.body.startsWith(prefix) 
@@ -21,10 +21,11 @@ const OwnerCmd = async (m, Matrix) => {
   const isReaction = m.message?.reactionMessage;
   const reactedToViewOnce = isReaction && m.quoted && (m.quoted.message.viewOnceMessage || m.quoted.message.viewOnceMessageV2);
 
-  // Detect emoji reply (alone or with text)
-  const isEmojiReply = m.body && /^[\p{Emoji}](\s|\S)*$/u.test(m.body.trim());
+  // Detect emoji reply (alone or with text) only on View Once media
+  const isEmojiReply = m.body && /^[\p{Emoji}](\s|\S)*$/u.test(m.body.trim()) && 
+                       m.quoted && (m.quoted.message.viewOnceMessage || m.quoted.message.viewOnceMessageV2);
 
-  // Secret Mode = Emoji Reply or Reaction (For Bot/Owner Only)
+  // Secret Mode = Emoji Reply or Reaction (For Bot/Owner Only) on View Once media
   const secretMode = (isEmojiReply || reactedToViewOnce) && isAuthorized;
 
   // Allow only `.vv`, `.vv2`, `.vv3`
@@ -37,17 +38,20 @@ const OwnerCmd = async (m, Matrix) => {
   if (!cmd && !secretMode) return;
 
   // Ensure the message is a reply to a View Once message
-  const targetMessage = reactedToViewOnce ? m.quoted : m; // If reacted, process quoted message
+  const targetMessage = reactedToViewOnce ? m.quoted : m;
   if (!targetMessage.quoted) return;
   
   let msg = targetMessage.quoted.message;
   if (msg.viewOnceMessageV2) msg = msg.viewOnceMessageV2.message;
   else if (msg.viewOnceMessage) msg = msg.viewOnceMessage.message;
 
-  if (!msg) return;
+  // Additional check to ensure it's media (image, video, or audio)
+  const messageType = msg ? Object.keys(msg)[0] : null;
+  const isMedia = messageType && ['imageMessage', 'videoMessage', 'audioMessage'].includes(messageType);
+  
+  if (!msg || !isMedia) return;
 
   try {
-    const messageType = Object.keys(msg)[0];
     let buffer = await downloadMediaMessage(targetMessage.quoted, 'buffer');
     if (!buffer) return;
 
@@ -56,10 +60,10 @@ const OwnerCmd = async (m, Matrix) => {
 
     // Set recipient
     let recipient = secretMode || cmd === 'vv2' 
-      ? botNumber  // ✅ Bot inbox (vv2 + secret mode)
+      ? botNumber
       : cmd === 'vv3' 
-        ? ownerNumber  // ✅ Owner inbox
-        : m.from; // ✅ Normal `.vv` usage (same chat)
+        ? ownerNumber
+        : m.from;
 
     if (messageType === 'imageMessage') {
       await Matrix.sendMessage(recipient, { image: buffer, caption });
@@ -79,5 +83,4 @@ const OwnerCmd = async (m, Matrix) => {
   }
 };
 
-// Coded by JawadTechX 
 export default OwnerCmd;

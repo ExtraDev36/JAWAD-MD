@@ -1,69 +1,55 @@
-import axios from 'axios';
-import yts from 'yt-search';
+import axios from "axios";
+import yts from "yt-search";
 import config from '../config.cjs';
 
-const video = async (m, Matrix) => {
+const song = async (m, gss) => {
   const prefix = config.PREFIX;
-  const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
-  const args = m.body.slice(prefix.length + cmd.length).trim().split(/\s+/).filter(Boolean);
-  const query = args.join(" ");
+  const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(" ")[0].toLowerCase() : "";
+  const args = m.body.slice(prefix.length + cmd.length).trim().split(" ");
 
-  if (!['video', 'vid', 'mp4'].includes(cmd)) return;
+  if (cmd === "song") {
+    if (args.length === 0 || !args.join(" ")) {
+      return m.reply("*Please provide a song name or keywords to search for.*");
+    }
 
-  if (!query) {
-    return Matrix.sendMessage(m.from, { text: "❌ Please provide a video name or a YouTube link.\nExample:\n*.video Alone*\n*.video https://youtu.be/example*" }, { quoted: m });
-  }
+    const searchQuery = args.join(" ");
+    m.reply("*🎥 Searching for the video...*");
 
-  await m.React('🎬');
-  await Matrix.sendMessage(m.from, { text: `🎬 Searching for: *${query}*...` }, { quoted: m });
-
-  let videoUrl = query;
-
-  // Check if input is a YouTube link; if not, search
-  if (!query.includes("youtube.com") && !query.includes("youtu.be")) {
     try {
-      const searchResults = await yts(query);
+      const searchResults = await yts(searchQuery);
       if (!searchResults.videos || searchResults.videos.length === 0) {
-        return Matrix.sendMessage(m.from, { text: `❌ No results found for "${query}".` }, { quoted: m });
+        return m.reply(`❌ No results found for "${searchQuery}".`);
       }
-      videoUrl = searchResults.videos[0].url;
-    } catch (err) {
-      console.error(err);
-      return Matrix.sendMessage(m.from, { text: "❌ Error searching for the video. Try again later." }, { quoted: m });
-    }
-  }
 
-  try {
-    // Call API to fetch video details
-    const apiUrl = `https://api.davidcyriltech.my.id/download/ytmp4?url=${videoUrl}`;
-    const { data } = await axios.get(apiUrl);
+      const firstResult = searchResults.videos[0];
+      const videoUrl = firstResult.url;
 
-    if (!data.success) {
-      return Matrix.sendMessage(m.from, { text: `❌ Failed to download video for "${query}".` }, { quoted: m });
-    }
+      // Fetch video using API
+      const apiUrl = `https://apis.davidcyriltech.my.id/download/ytmp4?url=${videoUrl}`;
+      const response = await axios.get(apiUrl);
 
-    const { title, download_url } = data.result;
-
-    await Matrix.sendMessage(m.from, {
-      video: { url: download_url },
-      mimetype: 'video/mp4',
-      caption: title,
-      contextInfo: {
-        mentionedJid: [m.sender],
-        forwardingScore: 999,
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-          newsletterJid: '120363354023106228@newsletter',
-          newsletterName: "JawadTechX",
-          serverMessageId: 143
-        }
+      if (!response.data.success) {
+        return m.reply(`❌ Failed to fetch video for "${searchQuery}".`);
       }
-    }, { quoted: m });
 
-  } catch (error) {
-    console.error("Error in video command:", error);
-    Matrix.sendMessage(m.from, { text: "❌ An error occurred while processing your request." }, { quoted: m });
+      const { title, download_url } = response.data.result;
+
+      // Send the video file
+      await gss.sendMessage(
+        m.from,
+        {
+          video: { url: download_url },
+          mimetype: "video/mp4",
+          caption: `*${title}*\n\nPowered By JawadTechX 💜`,
+        },
+        { quoted: m }
+      );
+
+    } catch (error) {
+      console.error(error);
+      m.reply("❌ An error occurred while processing your request.");
+    }
   }
 };
 
-export default video;
+export default song;

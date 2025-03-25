@@ -24,7 +24,7 @@ const play = async (m, gss) => {
       const firstResult = searchResults.videos[0];
       const videoUrl = firstResult.url;
 
-      // Call the API to download the audio
+      // First API endpoint
       const apiUrl = `https://api.davidcyriltech.my.id/download/ytmp3?url=${videoUrl}`;
       const response = await axios.get(apiUrl);
 

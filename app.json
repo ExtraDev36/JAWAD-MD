@@ -24,7 +24,7 @@
     "MENU_IMAGE": {
       "description": "change menu image if want otherwise use default",
       "required": false,
-      "value": "https://files.catbox.moe/4udzp4.jpg"
+      "value": "https://files.catbox.moe/7l1tt5.jpg"
     },
     "DESCRIPTION": {
       "description": "add caption for menu and etc",

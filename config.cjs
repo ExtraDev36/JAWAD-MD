@@ -22,7 +22,7 @@ const config = {
   NOT_ALLOW: process.env.NOT_ALLOW !== undefined ? process.env.NOT_ALLOW === 'true' : true,
   MODE: process.env.MODE || "public",
   BOT_NAME: process.env.BOT_NAME || "JAWAD-MD",
-  MENU_IMAGE: process.env.MENU_IMAGE || "https://files.catbox.moe/4udzp4.jpg",
+  MENU_IMAGE: process.env.MENU_IMAGE || "https://files.catbox.moe/7l1tt5.jpg",
   DESCRIPTION: process.env.DESCRIPTION || "© ᴘᴏᴡᴇʀᴇᴅ ʙʏ Jᴀᴡᴀᴅ TᴇᴄʜX",
   OWNER_NAME: process.env.OWNER_NAME || "JawadTechX",
   OWNER_NUMBER: process.env.OWNER_NUMBER || "923427582273",
