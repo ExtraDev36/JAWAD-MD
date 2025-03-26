@@ -69,7 +69,7 @@ const Handler = async (chatUpdate, sock, logger) => {
         await handleAntilink(m, sock, logger, isBotAdmins, isAdmins, isCreator);
 
         // ✅ Status Auto-Reaction Feature
-        if (m.key && m.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REACT === "true") {
+        if (m.key && m.key.remoteJid === 'status@broadcast' && config.AUTO_READ_STATUS === "true") {
             const botJid = await decodeJidFixed(sock.user.id);
             const emojis = ['❤️', '💸', '😇', '🍂', '💥', '💯', '🔥', '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🙆', '🚩', '🥰', '💐', '😎', '🤎', '✅', '🫀', '🧡', '😁', '😄', '🌸', '🕊️', '🌷', '⛅', '🌟', '🗿', '🇵🇰', '💜', '💙', '🌝', '🖤', '💚'];
             const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
