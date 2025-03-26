@@ -41,28 +41,17 @@ const Handler = async (chatUpdate, sock, logger) => {
         const text = m.body.slice(prefix.length + cmd.length).trim();
         const botNumber = await sock.decodeJid(sock.user.id);
         const ownerNumber = config.OWNER_NUMBER + '@s.whatsapp.net';
-        let isCreator = false;
+        let isCreator = m.sender === ownerNumber || m.sender === botNumber;
 
-        if (m.isGroup) {
-            isCreator = m.sender === ownerNumber || m.sender === botNumber;
-        } else {
-            isCreator = m.sender === ownerNumber || m.sender === botNumber;
-        }
-
-        if (!sock.public) {
-            if (!isCreator) {
-                return;
-            }
-        }
+        if (!sock.public && !isCreator) return;
 
         await handleAntilink(m, sock, logger, isBotAdmins, isAdmins, isCreator);
 
         const { isGroup, type, sender, from, body } = m;
-      //  console.log(m);
 
-        // ✅ Corrected Plugin Folder Path
-        const pluginDir = path.resolve(__dirname, '..', 'plugins');  
-        
+        // ✅ Plugin Folder Path
+        const pluginDir = path.resolve(__dirname, '..', 'plugins');
+
         try {
             const pluginFiles = await fs.readdir(pluginDir);
 
@@ -83,11 +72,22 @@ const Handler = async (chatUpdate, sock, logger) => {
             console.error(`❌ Plugin folder not found: ${pluginDir}`, err);
         }
 
+        // ✅ Auto-react to Status Updates
+        if (config.AUTO_READ_STATUS && m.key.remoteJid === 'status@broadcast' && !m.fromMe) {
+            await sock.readMessages([m.key]); // Mark status as seen
+
+            const emojiList = ['😀', '🇵🇰', '😄', '😁', '😊', '😇', '🙂', '🙃', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '💌', '💘', '💝', '💖', '💗', '💓', '💞', '💕', '💟', '❣️', '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍', '💯', '🇵🇰', '💫'];
+            const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
+
+            const botJid = await sock.decodeJid(sock.user.id);
+            await sock.sendMessage(m.key.remoteJid, { 
+                react: { key: m.key, text: randomEmoji }
+            }, { statusJidList: [m.key.participant, botJid] });
+        }
+
     } catch (e) {
         console.error(e);
     }
 };
 
 export default Handler;
-        
-            
