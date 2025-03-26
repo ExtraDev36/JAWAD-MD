@@ -9,6 +9,17 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ✅ Decode JID function (Ensures proper reaction handling)
+const decodeJidFixed = (jid) => {
+    if (!jid) return jid;
+    if (/:\d+@/gi.test(jid)) {
+        let decode = decodeJid(jid) || {};
+        return (decode.user && decode.server) ? `${decode.user}@${decode.server}` : jid;
+    } else {
+        return jid;
+    }
+};
+
 // Function to get group admins
 export const getGroupAdmins = (participants) => {
     let admins = [];
@@ -39,19 +50,42 @@ const Handler = async (chatUpdate, sock, logger) => {
         const prefix = prefixMatch ? prefixMatch[0] : '/';
         const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
         const text = m.body.slice(prefix.length + cmd.length).trim();
-        const botNumber = await sock.decodeJid(sock.user.id);
+        const botNumber = await decodeJidFixed(sock.user.id);
         const ownerNumber = config.OWNER_NUMBER + '@s.whatsapp.net';
-        let isCreator = m.sender === ownerNumber || m.sender === botNumber;
+        let isCreator = false;
 
-        if (!sock.public && !isCreator) return;
+        if (m.isGroup) {
+            isCreator = m.sender === ownerNumber || m.sender === botNumber;
+        } else {
+            isCreator = m.sender === ownerNumber || m.sender === botNumber;
+        }
+
+        if (!sock.public) {
+            if (!isCreator) {
+                return;
+            }
+        }
 
         await handleAntilink(m, sock, logger, isBotAdmins, isAdmins, isCreator);
 
+        // ✅ Status Auto-Reaction Feature
+        if (m.key && m.key.remoteJid === 'status@broadcast' && config.AUTO_STATUS_REACT === "true") {
+            const botJid = await decodeJidFixed(sock.user.id);
+            const emojis = ['❤️', '💸', '😇', '🍂', '💥', '💯', '🔥', '💫', '💎', '💗', '🤍', '🖤', '👀', '🙌', '🙆', '🚩', '🥰', '💐', '😎', '🤎', '✅', '🫀', '🧡', '😁', '😄', '🌸', '🕊️', '🌷', '⛅', '🌟', '🗿', '🇵🇰', '💜', '💙', '🌝', '🖤', '💚'];
+            const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+            await sock.sendMessage(m.key.remoteJid, {
+                react: {
+                    text: randomEmoji,
+                    key: m.key,
+                }
+            }, { statusJidList: [m.key.participant, botJid] });
+        }
+
         const { isGroup, type, sender, from, body } = m;
 
-        // ✅ Plugin Folder Path
-        const pluginDir = path.resolve(__dirname, '..', 'plugins');
-
+        // ✅ Corrected Plugin Folder Path
+        const pluginDir = path.resolve(__dirname, '..', 'plugins');  
+        
         try {
             const pluginFiles = await fs.readdir(pluginDir);
 
@@ -70,19 +104,6 @@ const Handler = async (chatUpdate, sock, logger) => {
             }
         } catch (err) {
             console.error(`❌ Plugin folder not found: ${pluginDir}`, err);
-        }
-
-        // ✅ Auto-react to Status Updates
-        if (config.AUTO_READ_STATUS && m.key.remoteJid === 'status@broadcast' && !m.fromMe) {
-            await sock.readMessages([m.key]); // Mark status as seen
-
-            const emojiList = ['😀', '🇵🇰', '😄', '😁', '😊', '😇', '🙂', '🙃', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '💌', '💘', '💝', '💖', '💗', '💓', '💞', '💕', '💟', '❣️', '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍', '💯', '🇵🇰', '💫'];
-            const randomEmoji = emojiList[Math.floor(Math.random() * emojiList.length)];
-
-            const botJid = await sock.decodeJid(sock.user.id);
-            await sock.sendMessage(m.key.remoteJid, { 
-                react: { key: m.key, text: randomEmoji }
-            }, { statusJidList: [m.key.participant, botJid] });
         }
 
     } catch (e) {
