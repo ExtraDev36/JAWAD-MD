@@ -1,6 +1,6 @@
 import pkg from '@whiskeysockets/baileys';
 const { proto, downloadContentFromMessage } = pkg;
-import config from '../config.cjs';
+import config from '../../config.cjs';
 
 class AntiDeleteSystem {
     constructor() {
@@ -8,7 +8,7 @@ class AntiDeleteSystem {
         this.messageCache = new Map();
         this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
         this.cleanupInterval = setInterval(() => this.cleanExpiredMessages(), this.cacheExpiry);
-        this.botNumber = ''; // Will be set later
+        this.botNumber = '';
     }
 
     cleanExpiredMessages() {
@@ -42,9 +42,8 @@ class AntiDeleteSystem {
 const antiDelete = new AntiDeleteSystem();
 
 const AntiDelete = async (m, Matrix) => {
-    antiDelete.botNumber = Matrix.user.id.split(':')[0]?.split('@')[0] + '@s.whatsapp.net';
+    antiDelete.botNumber = Matrix.user.id.split(':')[0] + '@s.whatsapp.net';
     const prefix = config.PREFIX;
-    const ownerJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
     const text = m.body?.slice(prefix.length).trim().split(' ') || [];
     const cmd = text[0]?.toLowerCase();
     const subCmd = text[1]?.toLowerCase();
@@ -70,16 +69,15 @@ const AntiDelete = async (m, Matrix) => {
 
     // Command handler
     if (cmd === 'antidelete') {
-        if (m.sender !== ownerJid) {
-            await m.reply('🚫 *You are not authorized to use this command!*');
+        if (m.sender !== antiDelete.botNumber) {
+            await m.reply('🚫 *This command can only be used by the bot itself!*');
             return;
         }
         
         try {
-            const mode = config.DELETE_PATH === "same" ? "Same Chat + Bot Inbox" : "Owner PM";
+            const mode = config.DELETE_PATH === "same" ? "Same Chat + Bot Inbox" : "Bot Inbox Only";
             const responses = {
-                on: 
-`━━〔 *ANTI-DELETE SYSTEM* 〕━━┈⊷
+                on: `━━〔 *ANTI-DELETE SYSTEM* 〕━━┈⊷
 ┃◈╭─────────────·๏
 ┃◈┃• *Status:* ✅ Activated
 ┃◈┃• *Scope:* All Chats
@@ -87,17 +85,13 @@ const AntiDelete = async (m, Matrix) => {
 ┃◈┃• *Cache:* 5 Minutes
 ┃◈╰─────────────·๏
 🔰 *Deleted messages will now be recovered!*`,
-
-                off: 
-`━━〔 *ANTI-DELETE SYSTEM* 〕━━┈⊷
+                off: `━━〔 *ANTI-DELETE SYSTEM* 〕━━┈⊷
 ┃◈╭─────────────·๏
 ┃◈┃• *Status:* ❌ Deactivated
 ┃◈┃• *Cache:* Cleared
 ┃◈╰─────────────·๏
 ⚠️ *Message recovery is now disabled!*`,
-
-                help: 
-`━━〔 *ANTI-DELETE HELP* 〕━━┈⊷
+                help: `━━〔 *ANTI-DELETE HELP* 〕━━┈⊷
 ┃◈╭─────────────·๏
 ┃◈┃• *${prefix}antidelete on* - Enable protection
 ┃◈┃• *${prefix}antidelete off* - Disable protection
@@ -119,11 +113,11 @@ const AntiDelete = async (m, Matrix) => {
                 await m.reply(responses.help);
             }
             await m.React('✅');
-            return;
         } catch (error) {
             console.error('AntiDelete Command Error:', error);
             await m.React('❌');
         }
+        return;
     }
 
     // Message caching
@@ -211,10 +205,13 @@ const AntiDelete = async (m, Matrix) => {
                 const cachedMsg = antiDelete.messageCache.get(key.id);
                 antiDelete.messageCache.delete(key.id);
                 
-                // Always send log to bot's inbox
-                const logDestination = antiDelete.botNumber;
-                // Send to same chat or owner based on config
-                const mainDestination = config.DELETE_PATH === "same" ? key.remoteJid : ownerJid;
+                // Always send to bot's inbox
+                const destinations = [antiDelete.botNumber];
+                
+                // If mode is "same", also send to original chat
+                if (config.DELETE_PATH === "same") {
+                    destinations.push(key.remoteJid);
+                }
                 
                 const chatInfo = await getChatInfo(cachedMsg.chatJid);
                 const deletedBy = updateData?.participant ? 
@@ -225,8 +222,7 @@ const AntiDelete = async (m, Matrix) => {
                     cachedMsg.type.charAt(0).toUpperCase() + cachedMsg.type.slice(1) : 
                     'Text';
                 
-                const baseInfo = 
-`━━〔 *DELETED ${messageType} RECOVERED* 〕━━┈⊷
+                const baseInfo = `━━〔 *DELETED ${messageType} RECOVERED* 〕━━┈⊷
 ┃◈╭─────────────·๏
 ┃◈┃• *Sender:* ${cachedMsg.senderFormatted}
 ┃◈┃• *Deleted By:* ${deletedBy}
@@ -234,23 +230,24 @@ const AntiDelete = async (m, Matrix) => {
 ┃◈┃• *Deleted At:* ${antiDelete.formatTime(Date.now())}
 ┃◈╰─────────────·๏`;
 
-                // Send to main destination
-                if (cachedMsg.media) {
-                    const messageOptions = {
-                        [cachedMsg.type]: cachedMsg.media,
-                        mimetype: cachedMsg.mimetype,
-                        caption: baseInfo
-                    };
+                // Send to all destinations
+                for (const destination of destinations) {
+                    if (cachedMsg.media) {
+                        const messageOptions = {
+                            [cachedMsg.type]: cachedMsg.media,
+                            mimetype: cachedMsg.mimetype,
+                            caption: baseInfo + (cachedMsg.content ? `\n💬 *Caption:*\n${cachedMsg.content}` : '')
+                        };
 
-                    if (cachedMsg.type === 'voice') messageOptions.ptt = true;
+                        if (cachedMsg.type === 'voice') messageOptions.ptt = true;
 
-                    await Matrix.sendMessage(mainDestination, messageOptions);
-                    await Matrix.sendMessage(logDestination, messageOptions);
-                } 
-                else if (cachedMsg.content) {
-                    const textMessage = `${baseInfo}\n💬 *Content:*\n${cachedMsg.content}`;
-                    await Matrix.sendMessage(mainDestination, { text: textMessage });
-                    await Matrix.sendMessage(logDestination, { text: textMessage });
+                        await Matrix.sendMessage(destination, messageOptions);
+                    } 
+                    else if (cachedMsg.content) {
+                        await Matrix.sendMessage(destination, {
+                            text: `${baseInfo}\n💬 *Content:*\n${cachedMsg.content}`
+                        });
+                    }
                 }
             } catch (error) {
                 console.error('Error handling deleted message:', error);
