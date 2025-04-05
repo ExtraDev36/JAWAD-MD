@@ -1,46 +1,103 @@
 import pkg from '@whiskeysockets/baileys';
 const { proto, downloadContentFromMessage } = pkg;
 import config from '../config.cjs';
+import fs from 'fs';
+import path from 'path';
+
+// Database file path
+const DB_FILE = path.join(process.cwd(), 'database.json');
 
 class AntiDeleteSystem {
     constructor() {
-        this.enabled = false;
-        this.messageCache = new Map();
+        this.enabled = config.ANTI_DELETE || false; // Use config default
         this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
         this.cleanupInterval = setInterval(() => this.cleanExpiredMessages(), this.cacheExpiry);
+        this.loadDatabase();
+    }
+
+    // Load database from file
+    loadDatabase() {
+        try {
+            if (fs.existsSync(DB_FILE)) {
+                const data = fs.readFileSync(DB_FILE, 'utf8');
+                this.messageCache = new Map(JSON.parse(data));
+            } else {
+                this.messageCache = new Map();
+            }
+        } catch (error) {
+            console.error('Error loading database:', error);
+            this.messageCache = new Map();
+        }
+    }
+
+    // Save database to file
+    saveDatabase() {
+        try {
+            const data = JSON.stringify(Array.from(this.messageCache.entries()));
+            fs.writeFileSync(DB_FILE, data);
+        } catch (error) {
+            console.error('Error saving database:', error);
+        }
+    }
+
+    // Add message to cache and save to file
+    addMessage(key, message) {
+        this.messageCache.set(key, message);
+        this.saveDatabase();
+    }
+
+    // Delete message from cache and update file
+    deleteMessage(key) {
+        if (this.messageCache.has(key)) {
+            this.messageCache.delete(key);
+            this.saveDatabase();
+        }
     }
 
     cleanExpiredMessages() {
         const now = Date.now();
+        let changed = false;
+        
         for (const [key, msg] of this.messageCache.entries()) {
             if (now - msg.timestamp > this.cacheExpiry) {
                 this.messageCache.delete(key);
+                changed = true;
             }
+        }
+        
+        if (changed) {
+            this.saveDatabase();
         }
     }
 
     formatTime(timestamp) {
         const options = {
+            timeZone: 'UTC',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
+            hour12: true,
+            timeZoneName: 'short'
         };
         return new Date(timestamp).toLocaleString('en-US', options);
     }
 
     destroy() {
         clearInterval(this.cleanupInterval);
+        this.saveDatabase();
     }
 }
 
 const antiDelete = new AntiDeleteSystem();
 
 const AntiDelete = async (m, Matrix) => {
+    const botNumber = await Matrix.decodeJid(Matrix.user.id);
+    const ownerJid = botNumber + '@s.whatsapp.net';
+    const isCreator = [ownerJid].includes(m.sender);
     const prefix = config.PREFIX;
-    const ownerJid = config.OWNER_NUMBER + '@s.whatsapp.net';
     const text = m.body?.slice(prefix.length).trim().split(' ') || [];
     const cmd = text[0]?.toLowerCase();
     const subCmd = text[1]?.toLowerCase();
@@ -66,17 +123,18 @@ const AntiDelete = async (m, Matrix) => {
 
     // Command handler
     if (cmd === 'antidelete') {
-        if (m.sender !== ownerJid) {
-            await m.reply('╭━━〔 *KHAN-MD* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• 🚫 *You are not authorized to use this command!*');
+        if (!isCreator) {
+            await m.reply('🚫 *You are not authorized to use this command!*');
             return;
         }
         
         try {
-            const mode = config.DELETE_PATH === "same" ? "Same Chat" : "Owner PM";
+            const mode = config.ANTI_DELETE_PATH === "same" ? "Same Chat" : "Owner PM";
             const responses = {
-                on: `╭━━〔 *KHAN-MD* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• 🛡️ *ANTI-DELETE ENABLED*\n┃◈┃• \n┃◈┃• 🔹 Protection: *ACTIVE*\n┃◈┃• 🔹 Scope: *All Chats*\n┃◈┃• 🔹 Cache: *5 minutes*\n┃◈┃• 🔹 Mode: *${mode}*\n┃◈┃• \n┃◈┃• ✅ Deleted messages will be recovered!`,
-                off: `╭━━〔 *KHAN-MD* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• ⚠️ *ANTI-DELETE DISABLED*\n┃◈┃• \n┃◈┃• 🔸 Protection: *OFF*\n┃◈┃• 🔸 Cache cleared\n┃◈┃• 🔸 Deleted messages will not be recovered.`,
-                help: `╭━━〔 *KHAN-MD* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• ⚙️ *ANTI-DELETE SETTINGS*\n┃◈┃• \n┃◈┃• 🔹 *${prefix}antidelete on* - Enable\n┃◈┃• 🔸 *${prefix}antidelete off* - Disable\n┃◈┃• \n┃◈┃• Current Status: ${antiDelete.enabled ? '✅ ACTIVE' : '❌ INACTIVE'}\n┃◈┃• Current Mode: ${mode}`
+                on: `━━〔 *ANTI-DELETE* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• *Status:* 🟢 ENABLED\n┃◈┃• *Protection:* ACTIVE\n┃◈┃• *Scope:* All Chats\n┃◈┃• *Cache:* 5 minutes\n┃◈┃• *Mode:* ${mode}\n┃◈╰─────────────·๏\n┃◈• Deleted messages will be recovered!`,
+                off: `━━〔 *ANTI-DELETE* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• *Status:* 🔴 DISABLED\n┃◈┃• *Protection:* INACTIVE\n┃◈┃• *Cache:* Cleared\n┃◈╰─────────────·๏\n┃◈• Deleted messages will not be recovered`,
+                help: `━━〔 *ANTI-DELETE* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• *Command:* ${prefix}antidelete on\n┃◈┃• *Description:* Enable anti-delete\n┃◈┃• *Command:* ${prefix}antidelete off\n┃◈┃• *Description:* Disable anti-delete\n┃◈╰─────────────·๏\n┃◈• *Current Status:* ${antiDelete.enabled ? '🟢 ACTIVE' : '🔴 INACTIVE'}\n┃◈• *Current Mode:* ${mode}`,
+                status: `━━〔 *ANTI-DELETE STATUS* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• *Current State:* ${antiDelete.enabled ? '🟢 ACTIVE' : '🔴 INACTIVE'}\n┃◈┃• *Mode:* ${mode}\n┃◈┃• *Cache Duration:* 5 minutes\n┃◈╰─────────────·๏`
             };
 
             if (subCmd === 'on') {
@@ -86,7 +144,11 @@ const AntiDelete = async (m, Matrix) => {
             else if (subCmd === 'off') {
                 antiDelete.enabled = false;
                 antiDelete.messageCache.clear();
+                antiDelete.saveDatabase();
                 await m.reply(responses.off);
+            }
+            else if (subCmd === 'status') {
+                await m.reply(responses.status);
             }
             else {
                 await m.reply(responses.help);
@@ -152,7 +214,7 @@ const AntiDelete = async (m, Matrix) => {
                 }
                 
                 if (content || media) {
-                    antiDelete.messageCache.set(msg.key.id, {
+                    antiDelete.addMessage(msg.key.id, {
                         content,
                         media,
                         type,
@@ -186,9 +248,9 @@ const AntiDelete = async (m, Matrix) => {
                 }
 
                 const cachedMsg = antiDelete.messageCache.get(key.id);
-                antiDelete.messageCache.delete(key.id);
+                antiDelete.deleteMessage(key.id);
                 
-                const destination = config.DELETE_PATH === "same" ? key.remoteJid : ownerJid;
+                const destination = config.ANTI_DELETE_PATH === "same" ? key.remoteJid : ownerJid;
                 const chatInfo = await getChatInfo(cachedMsg.chatJid);
                 
                 const deletedBy = updateData?.participant ? 
@@ -199,7 +261,7 @@ const AntiDelete = async (m, Matrix) => {
                     cachedMsg.type.charAt(0).toUpperCase() + cachedMsg.type.slice(1) : 
                     'Text';
                 
-                const baseInfo = `╭━━〔 *KHAN-MD* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• 🚨 *Deleted ${messageType} Recovered!*\n┃◈┃• \n┃◈┃• 📌 *Sender:* ${cachedMsg.senderFormatted}\n┃◈┃• ✂️ *Deleted By:* ${deletedBy}\n┃◈┃• 📍 *Chat:* ${chatInfo.name}${chatInfo.isGroup ? ' (Group)' : ''}\n┃◈┃• 🕒 *Deleted At:* ${antiDelete.formatTime(Date.now())}`;
+                const baseInfo = `━━〔 *ANTIDELETE ALERT ⚠️* 〕━━┈⊷\n┃◈╭─────────────·๏\n┃◈┃• *Type:* ${messageType}\n┃◈┃• *Sender:* ${cachedMsg.senderFormatted}\n┃◈┃• *Deleted By:* ${deletedBy}\n┃◈┃• *Chat:* ${chatInfo.name}${chatInfo.isGroup ? ' (Group)' : ''}\n┃◈┃• *Sent At:* ${antiDelete.formatTime(cachedMsg.timestamp)}\n┃◈┃• *Deleted At:* ${antiDelete.formatTime(Date.now())}\n┃◈╰─────────────·๏`;
 
                 if (cachedMsg.media) {
                     const messageOptions = {
@@ -216,7 +278,7 @@ const AntiDelete = async (m, Matrix) => {
                 } 
                 else if (cachedMsg.content) {
                     await Matrix.sendMessage(destination, {
-                        text: `${baseInfo}\n┃◈┃• \n┃◈┃• 💬 *Content:* \n┃◈┃• ${cachedMsg.content}`
+                        text: `${baseInfo}\n┃◈• *Content:*\n${cachedMsg.content}`
                     });
                 }
             } catch (error) {

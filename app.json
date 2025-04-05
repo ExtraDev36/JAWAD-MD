@@ -32,10 +32,16 @@
       "value": "© ᴘᴏᴡᴇʀᴇᴅ ʙʏ Jᴀᴡᴀᴅ TᴇᴄʜX"
     },
     "ANTI_DELETE": {
+      "description": "set path for antidelete for same chat set to same",
+      "required": true,
+      "value": "inbox"
+    },
+    "ANTI_DELETE_PATH": {
       "description": "make it true for use anti delete",
       "required": true,
       "value": "true"
     },
+    
     "AUTO_STATUS_SEEN": {
       "description": "make it true if you want bot to view status",
       "required": false,
